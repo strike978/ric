@@ -3,7 +3,7 @@
 A proof-of-concept Chromium extension for getting 23andMe **relatives in common** for
 a 23andMe profile.
 
-It uses the 23andMe session already open in your browser — there is no separate login
+It uses the 23andMe session already open in your browser. There is no separate login
 and no password is stored. Pick a profile, load its DNA relatives, and ask for the
 relatives-in-common list for the first five of them.
 
