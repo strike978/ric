@@ -1,0 +1,274 @@
+/*
+ * Relatives in Common — shared styles
+ * Used by both index.html (profile + relatives) and compare.html
+ * (relatives in common for one pair).
+ */
+
+/* Theme palette and font stacks */
+:root {
+  --bg: #0d0f14;
+  --panel: #141922;
+  --border: #252b38;
+  --text: #e7eaf1;
+  --muted: #8c96a8;
+  --accent: #7c9cff;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Page background and base typography */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(1200px 600px at 20% -10%, #1b2030 0%, var(--bg) 60%);
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Header: logo mark, page title, optional subtitle */
+.topbar {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 22px 28px 10px;
+}
+
+.brand { display: flex; align-items: center; gap: 14px; }
+
+.mark { position: relative; width: 40px; height: 32px; flex: none; }
+.mark span {
+  position: absolute;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  opacity: 0.92;
+}
+.mark span:first-child { left: 0; background: #5b8def; }
+.mark span:last-child { left: 8px; background: #a855f7; mix-blend-mode: screen; }
+
+h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+
+.sub {
+  margin: 1px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.meta {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Page layout: centered column holding one or more panels */
+main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 12px 28px 48px;
+  display: grid;
+  gap: 14px;
+}
+
+/* Panel: the card that holds the controls and the table */
+.panel {
+  background: linear-gradient(180deg, var(--panel) 0%, #11151d 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+/* Profile picker: label, select, and the selected profile id */
+.label {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+select {
+  width: 100%;
+  max-width: 420px;
+  padding: 11px 13px;
+  background: #0b0e14;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  outline: none;
+}
+select:focus { border-color: #3f4f74; box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.14); }
+select:disabled { opacity: 0.6; }
+
+.id-box {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px solid #1e2430;
+}
+
+.id-label {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.id-value {
+  font-family: var(--mono);
+  font-size: 20px;
+  color: #d6e0ff;
+  overflow-wrap: anywhere;
+}
+
+/* Buttons: solid primary, outlined secondary, small row action */
+.primary {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 0;
+  background: #4f6bdc;
+  color: #f6f8ff;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.primary:hover { background: #5d79e8; }
+.primary:active { background: #445fc7; }
+.primary:disabled {
+  background: #242c3b;
+  color: #7c879b;
+  cursor: default;
+}
+.primary:focus-visible { outline: 2px solid #8fb0ff; outline-offset: 2px; }
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid #2c3547;
+  background: #1b2130;
+  color: #cfd9ee;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.secondary:hover { background: #232b3c; border-color: #3a465c; }
+.secondary:disabled { opacity: 0.45; cursor: default; }
+.secondary:focus-visible { outline: 2px solid #8fb0ff; outline-offset: 2px; }
+
+/* Feedback: per-row loading spinner and inline error text */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #8fb0ff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.action-error { color: #ff8d9c; font-size: 12px; }
+
+/* Relatives table: scroll container, sticky header, compact rows */
+.output { display: grid; gap: 8px; }
+
+.table-wrap {
+  overflow: auto;
+  max-height: 55vh;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #090c11;
+}
+
+.relatives-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.relatives-table th,
+.relatives-table td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid #1e2430;
+}
+
+.relatives-table th {
+  position: sticky;
+  top: 0;
+  background: #10141c;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.relatives-table tbody tr:last-child td { border-bottom: none; }
+.relatives-table td.id { font-family: var(--mono); color: #cfd6e4; }
+.relatives-table td.empty { color: var(--muted); text-align: center; padding: 18px; }
+
+.actions-col { width: 1%; }
+.relatives-table td.actions { text-align: right; }
+
+.link-button {
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #2c3547;
+  background: transparent;
+  color: #a8bcf5;
+  cursor: pointer;
+}
+.link-button:hover { background: #1b2130; border-color: #3a465c; }
+.link-button:focus-visible { outline: 2px solid #8fb0ff; outline-offset: 2px; }
+
+/* Messages: amber notice for sign-in / blocked / parse problems */
+.notice {
+  margin: 0;
+  font-size: 13px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  border: 1px solid rgba(242, 178, 76, 0.3);
+  background: rgba(242, 178, 76, 0.09);
+  color: #f6d9a2;
+}
+
+/* Utility */
+.hidden { display: none !important; }
