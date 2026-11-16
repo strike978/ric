@@ -14,27 +14,11 @@ const db = new Dexie('relatives-in-common');
 
 db.version(1).stores({
   profiles: 'profile_id',
+  comparisons: 'profile_id',
 });
 
-// The fields kept for each relative.
-const RELATIVE_FIELDS = [
-  'relative_profile_id',
-  'first_name',
-  'last_name',
-  'initials',
-  'ibd_proportion',
-  'is_maternal_side',
-  'is_paternal_side',
-  'num_segments',
-  'max_segment_length',
-];
-
 function relativeRecord(relative) {
-  const record = {};
-  for (const field of RELATIVE_FIELDS) {
-    record[field] = relative[field] === undefined ? null : relative[field];
-  }
-  return record;
+  return { ...relative };
 }
 
 // Missing or non-numeric proportions sort last.
@@ -73,4 +57,32 @@ export async function getRelatives(profileId) {
   return record && Array.isArray(record.relatives)
     ? record.relatives.sort(byIbdDescending)
     : [];
+}
+
+// Stores the relatives-in-common entries for one profile + relative pair,
+// keeping every field returned by the endpoint. One record per profile holds
+// all of that profile's comparisons.
+export async function saveComparison(profileId, relativeId, entries) {
+  if (!profileId || !relativeId) return;
+
+  await db.transaction('rw', db.comparisons, async () => {
+    const record = await db.comparisons.get(profileId);
+    const list = record && Array.isArray(record.comparisons) ? record.comparisons : [];
+    const others = list.filter((item) => item.relative_profile_id !== relativeId);
+
+    others.push({ relative_profile_id: relativeId, entries });
+    await db.comparisons.put({ profile_id: profileId, comparisons: others });
+  });
+}
+
+// Reads one pair's relatives-in-common entries.
+export async function getComparison(profileId, relativeId) {
+  if (!profileId || !relativeId) return null;
+
+  const record = await db.comparisons.get(profileId);
+  const match = record && Array.isArray(record.comparisons)
+    ? record.comparisons.find((item) => item.relative_profile_id === relativeId)
+    : null;
+
+  return match ? match.entries : null;
 }

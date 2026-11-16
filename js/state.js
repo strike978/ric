@@ -18,10 +18,11 @@ export const mainState = {
   notice: '',
 };
 
-// Relatives-in-common page: one pair, read from the cache.
+// Relatives-in-common page: one pair, read from the database.
 export const compareState = {
   subtitle: '',
   meta: '',
   entries: [],
+  loading: false,
   notice: '',
 };

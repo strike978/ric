@@ -1,11 +1,12 @@
 /*
  * Relatives in common page
  *
- * Shows the comparison for one pair (profile + relative). The main page fetches and
- * caches the data, so this page only reads the cache.
+ * Shows the comparison for one pair (profile + relative). The main page saves
+ * it to IndexedDB, so this page only reads the database.
  */
 
 import { compareState as state } from './state.js';
+import { getComparison } from './db.js';
 
 const params = new URLSearchParams(location.search);
 const profileId = params.get('profile') || '';
@@ -25,24 +26,9 @@ function displayValue(value) {
   return value === undefined || value === null || value === '' ? '—' : value;
 }
 
-/* ---------- Load from the cache written by the main page ---------- */
+/* ---------- Load from IndexedDB ---------- */
 
-function comparisonKey(profileIdValue, relativeIdValue) {
-  return 'ric:compare:' + profileIdValue + ':' + relativeIdValue;
-}
-
-function readComparison(profileIdValue, relativeIdValue) {
-  try {
-    const raw = localStorage.getItem(comparisonKey(profileIdValue, relativeIdValue));
-    if (!raw) return null;
-    const value = JSON.parse(raw);
-    return Array.isArray(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function load() {
+async function load() {
   state.subtitle = profileId && relativeId ? profileId + ' → ' + relativeId : '';
 
   if (!profileId || !relativeId) {
@@ -50,14 +36,26 @@ function load() {
     return;
   }
 
-  const cached = readComparison(profileId, relativeId);
-  if (!cached) {
-    state.notice = 'No cached comparison for this pair. Use "Get relatives in common" on the main page first.';
-    return;
-  }
+  state.loading = true;
+  state.meta = 'Loading…';
 
-  state.entries = cached;
-  state.meta = cached.length + ' relative' + (cached.length === 1 ? '' : 's') + ' in common';
+  try {
+    const entries = await getComparison(profileId, relativeId);
+    if (!entries) {
+      state.meta = '';
+      state.notice = 'No saved comparison for this pair. Use "Get relatives in common" on the main page first.';
+      return;
+    }
+
+    state.entries = entries;
+    state.meta = entries.length + ' relative' + (entries.length === 1 ? '' : 's') + ' in common';
+  } catch {
+    state.meta = '';
+    state.notice = 'Could not read the local database.';
+  } finally {
+    state.loading = false;
+    m.redraw.sync();
+  }
 }
 
 /* ---------- View ---------- */
@@ -99,7 +97,8 @@ const App = {
                   m('td', displayValue(entry.predicted_relationship_id_2)),
                   m('td', displayValue(entry.ibd_proportion_2)),
                 ]))
-              : m('tr', m('td.empty', { colspan: 8 }, 'No relatives in common'))),
+              : m('tr', m('td.empty', { colspan: 8 },
+                  state.loading ? 'Loading…' : 'No relatives in common'))),
           ])),
         ]),
 

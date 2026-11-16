@@ -4,29 +4,20 @@
  * 1. GET you.23andme.com and read the signed-in profiles from the inline
  *    quickInviteModal data (see profiles.js).
  * 2. Load the selected profile's DNA relatives.
- * 3. Fetch relatives-in-common for the first five rows, one at a time, with a
+ * 3. Fetch relatives-in-common for the first two rows, one at a time, with a
  *    one second gap. Only the active row shows a spinner; then it gets an Open
  *    button.
- * 4. Cache each comparison in localStorage so compare.html can render instantly.
+ * 4. Save each comparison (its first two entries) to IndexedDB so compare.html
+ *    can render it.
  */
 
 import { mainState as state } from './state.js';
 import { extractProfiles } from './profiles.js';
-import { saveRelatives } from './db.js';
+import { saveRelatives, saveComparison } from './db.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
-const COMPARISON_FIELDS = [
-  'profile_id',
-  'first_name',
-  'last_name',
-  'first_initial',
-  'last_initial',
-  'is_open_sharing',
-  'predicted_relationship_id_1',
-  'predicted_relationship_id_2',
-  'ibd_proportion_1',
-  'ibd_proportion_2',
-];
+const COMPARISON_LIMIT = 2;
+const COMPARISON_ENTRY_LIMIT = 2;
 
 let relativesXhr = null;
 let relativesSeq = 0;
@@ -38,18 +29,8 @@ function pickRelatives(payload) {
     ? payload
     : payload && Array.isArray(payload.relatives) ? payload.relatives : [];
 
-  return list.filter(Boolean).map((relative) => ({
-    initials: relative.initials,
-    relative_profile_id: relative.relative_profile_id,
-    first_name: relative.first_name,
-    last_name: relative.last_name,
-    is_open_sharing: relative.is_open_sharing,
-    ibd_proportion: relative.ibd_proportion,
-    is_maternal_side: relative.is_maternal_side,
-    is_paternal_side: relative.is_paternal_side,
-    num_segments: relative.num_segments,
-    max_segment_length: relative.max_segment_length,
-  }));
+  // Keep every field the endpoint returns.
+  return list.filter((relative) => relative && typeof relative === 'object');
 }
 
 function looksLikeEntry(item) {
@@ -75,34 +56,11 @@ function extractEntries(payload) {
   return [];
 }
 
-// Keeps only the fields the comparison page displays.
-function pickEntries(list) {
-  return list.map((entry) => {
-    const out = {};
-    for (const field of COMPARISON_FIELDS) {
-      out[field] = field in entry ? entry[field] : null;
-    }
-    return out;
-  });
-}
-
-/* ---------- Comparison cache ---------- */
-
-function comparisonKey(profileId, relativeId) {
-  return 'ric:compare:' + profileId + ':' + relativeId;
-}
-
-function storeComparison(profileId, relativeId, entries) {
-  try {
-    localStorage.setItem(comparisonKey(profileId, relativeId), JSON.stringify(entries));
-  } catch { /* ignore quota errors */ }
-}
-
 /* ---------- Endpoints and requests ---------- */
 
 function relativesUrl(profileId) {
   return 'https://you.23andme.com/p/' + encodeURIComponent(profileId)
-    + '/family/relatives/ajax/?limit=100';
+    + '/family/relatives/ajax/?limit=2';
 }
 
 function comparisonUrl(profileId, relativeId) {
@@ -221,13 +179,13 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Fetches the first five comparisons sequentially, 1s apart. The row being
-// fetched shows a spinner; finished rows get an Open button.
+// Fetches the first COMPARISON_LIMIT comparisons sequentially, 1s apart. The
+// row being fetched shows a spinner; finished rows get an Open button.
 async function getRelativesInCommon() {
   if (!state.selectedId || state.relatives.length === 0 || state.comparisonsRunning) return;
 
   const profileId = state.selectedId;
-  const targets = state.relatives.slice(0, 5);
+  const targets = state.relatives.slice(0, COMPARISON_LIMIT);
 
   state.comparisons = {};
   state.comparisonsRunning = true;
@@ -243,8 +201,10 @@ async function getRelativesInCommon() {
 
       try {
         const xhr = await xhrGet(comparisonUrl(profileId, relativeId));
-        const entries = pickEntries(extractEntries(JSON.parse(xhr.responseText)));
-        storeComparison(profileId, relativeId, entries);
+        const entries = extractEntries(JSON.parse(xhr.responseText))
+          .slice(0, COMPARISON_ENTRY_LIMIT);
+
+        await saveComparison(profileId, relativeId, entries);
         state.comparisons[relativeId] = 'ready';
       } catch {
         state.comparisons[relativeId] = 'error';
@@ -275,7 +235,7 @@ function openComparison(relativeId) {
 /* ---------- View ---------- */
 
 function actionFor(relative, index) {
-  if (index >= 5) return null;
+  if (index >= COMPARISON_LIMIT) return null;
 
   const relativeId = relative.relative_profile_id;
   const status = state.comparisons[relativeId];
