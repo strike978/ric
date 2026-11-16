@@ -7,13 +7,13 @@
  * 3. Fetch relatives-in-common for the first two rows, one at a time, with a
  *    one second gap. Only the active row shows a spinner; then it gets an Open
  *    button.
- * 4. Save each comparison (its first two entries) to IndexedDB so compare.html
- *    can render it.
+ * 4. Save each pair's first two relatives in common to IndexedDB so
+ *    compare.html can render them.
  */
 
 import { mainState as state } from './state.js';
 import { extractProfiles } from './profiles.js';
-import { saveRelatives, saveComparison } from './db.js';
+import { saveRelatives, saveRelativesInCommon, deleteDatabase } from './db.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
 const COMPARISON_LIMIT = 2;
@@ -33,22 +33,23 @@ function pickRelatives(payload) {
   return list.filter((relative) => relative && typeof relative === 'object');
 }
 
-function looksLikeEntry(item) {
+// Returns true for one relatives-in-common record.
+function isCommonRelative(item) {
   return item && typeof item === 'object'
     && ('profile_id' in item || 'predicted_relationship_id_1' in item);
 }
 
-// Accepts an array, a single entry, or an object that wraps the array.
-function extractEntries(payload) {
-  if (Array.isArray(payload)) return payload.filter(looksLikeEntry);
+// Accepts an array, a single relative, or an object that wraps the array.
+function extractCommonRelatives(payload) {
+  if (Array.isArray(payload)) return payload.filter(isCommonRelative);
 
   if (payload && typeof payload === 'object') {
-    if (looksLikeEntry(payload)) return [payload];
+    if (isCommonRelative(payload)) return [payload];
 
     for (const value of Object.values(payload)) {
       if (Array.isArray(value)) {
-        const entries = value.filter(looksLikeEntry);
-        if (entries.length > 0) return entries;
+        const relatives = value.filter(isCommonRelative);
+        if (relatives.length > 0) return relatives;
       }
     }
   }
@@ -201,10 +202,10 @@ async function getRelativesInCommon() {
 
       try {
         const xhr = await xhrGet(comparisonUrl(profileId, relativeId));
-        const entries = extractEntries(JSON.parse(xhr.responseText))
+        const relativesInCommon = extractCommonRelatives(JSON.parse(xhr.responseText))
           .slice(0, COMPARISON_ENTRY_LIMIT);
 
-        await saveComparison(profileId, relativeId, entries);
+        await saveRelativesInCommon(profileId, relativeId, relativesInCommon);
         state.comparisons[relativeId] = 'ready';
       } catch {
         state.comparisons[relativeId] = 'error';
@@ -220,7 +221,7 @@ async function getRelativesInCommon() {
   m.redraw.sync();
 }
 
-// Opens compare.html for one relative. The page reads the cached result.
+// Opens compare.html for one relative. The page reads the saved result.
 function openComparison(relativeId) {
   if (!state.selectedId || !relativeId) return;
 
@@ -230,6 +231,34 @@ function openComparison(relativeId) {
 
   if (chrome.tabs && chrome.tabs.create) chrome.tabs.create({ url });
   else window.open(url, '_blank', 'noopener');
+}
+
+// Deletes the whole local database after confirmation.
+async function deleteData() {
+  if (state.clearing || state.relativesPhase === 'loading' || state.comparisonsRunning) return;
+
+  const confirmed = window.confirm(
+    'Delete the entire local database and all saved relatives and relatives-in-common data from this browser?'
+  );
+  if (!confirmed) return;
+
+  state.clearing = true;
+  state.notice = '';
+  m.redraw.sync();
+
+  try {
+    await deleteDatabase();
+    state.relatives = [];
+    state.relativesPhase = 'idle';
+    state.comparisons = {};
+    state.comparisonsRunning = false;
+    state.notice = 'Local database deleted.';
+  } catch (err) {
+    state.notice = 'Could not delete the local database: ' + (err.message || err);
+  } finally {
+    state.clearing = false;
+    m.redraw.sync();
+  }
 }
 
 /* ---------- View ---------- */
@@ -326,6 +355,15 @@ const App = {
                 : m('tr', m('td.empty', { colspan: 3 },
                     state.relativesPhase === 'error' ? 'Request failed' : 'No relatives'))),
             ])),
+          ]),
+
+          m('div.panel-footer', [
+            m('span.footnote', 'Saved data stays in this browser.'),
+            m('button#deleteDatabase.link-button.danger', {
+              type: 'button',
+              disabled: state.clearing || state.relativesPhase === 'loading' || state.comparisonsRunning,
+              onclick: deleteData,
+            }, state.clearing ? 'Deleting…' : 'Delete database'),
           ]),
         ]),
 

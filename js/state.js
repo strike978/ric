@@ -5,7 +5,7 @@
  * objects and call m.redraw.sync() when they need the view to update.
  */
 
-// Main page: profiles, the relatives list, and the first-five comparison status.
+// Main page: profiles, the relatives list, and comparison fetch status.
 export const mainState = {
   phase: 'loading',          // loading | ready | error
   profiles: [],
@@ -15,6 +15,7 @@ export const mainState = {
   relativesPhase: 'idle',    // idle | loading | ready | error
   comparisons: {},           // relative id -> loading | ready | error
   comparisonsRunning: false,
+  clearing: false,
   notice: '',
 };
 
@@ -22,7 +23,7 @@ export const mainState = {
 export const compareState = {
   subtitle: '',
   meta: '',
-  entries: [],
+  relatives: [],
   loading: false,
   notice: '',
 };

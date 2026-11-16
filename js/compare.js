@@ -6,7 +6,7 @@
  */
 
 import { compareState as state } from './state.js';
-import { getComparison } from './db.js';
+import { getRelativesInCommon } from './db.js';
 
 const params = new URLSearchParams(location.search);
 const profileId = params.get('profile') || '';
@@ -14,12 +14,12 @@ const relativeId = params.get('relative') || '';
 
 /* ---------- Helpers for one comparison entry ---------- */
 
-function initialsOf(entry) {
-  return [entry.first_initial, entry.last_initial].filter(Boolean).join('');
+function initialsOf(relative) {
+  return [relative.first_initial, relative.last_initial].filter(Boolean).join('');
 }
 
-function nameOf(entry) {
-  return [entry.first_name, entry.last_name].filter(Boolean).join(' ');
+function nameOf(relative) {
+  return [relative.first_name, relative.last_name].filter(Boolean).join(' ');
 }
 
 function displayValue(value) {
@@ -40,15 +40,15 @@ async function load() {
   state.meta = 'Loading…';
 
   try {
-    const entries = await getComparison(profileId, relativeId);
-    if (!entries) {
+    const relatives = await getRelativesInCommon(profileId, relativeId);
+    if (!relatives) {
       state.meta = '';
       state.notice = 'No saved comparison for this pair. Use "Get relatives in common" on the main page first.';
       return;
     }
 
-    state.entries = entries;
-    state.meta = entries.length + ' relative' + (entries.length === 1 ? '' : 's') + ' in common';
+    state.relatives = relatives;
+    state.meta = relatives.length + ' relative' + (relatives.length === 1 ? '' : 's') + ' in common';
   } catch {
     state.meta = '';
     state.notice = 'Could not read the local database.';
@@ -86,16 +86,16 @@ const App = {
               m('th', 'Rel 2'),
               m('th', 'IBD 2'),
             ])),
-            m('tbody#rows', state.entries.length
-              ? state.entries.map((entry) => m('tr', [
-                  m('td', initialsOf(entry) || '—'),
-                  m('td', nameOf(entry) || '—'),
-                  m('td.id', displayValue(entry.profile_id)),
-                  m('td', entry.is_open_sharing === undefined || entry.is_open_sharing === null ? '—' : (entry.is_open_sharing ? 'yes' : 'no')),
-                  m('td', displayValue(entry.predicted_relationship_id_1)),
-                  m('td', displayValue(entry.ibd_proportion_1)),
-                  m('td', displayValue(entry.predicted_relationship_id_2)),
-                  m('td', displayValue(entry.ibd_proportion_2)),
+            m('tbody#rows', state.relatives.length
+              ? state.relatives.map((relative) => m('tr', [
+                  m('td', initialsOf(relative) || '—'),
+                  m('td', nameOf(relative) || '—'),
+                  m('td.id', displayValue(relative.profile_id)),
+                  m('td', relative.is_open_sharing === undefined || relative.is_open_sharing === null ? '—' : (relative.is_open_sharing ? 'yes' : 'no')),
+                  m('td', displayValue(relative.predicted_relationship_id_1)),
+                  m('td', displayValue(relative.ibd_proportion_1)),
+                  m('td', displayValue(relative.predicted_relationship_id_2)),
+                  m('td', displayValue(relative.ibd_proportion_2)),
                 ]))
               : m('tr', m('td.empty', { colspan: 8 },
                   state.loading ? 'Loading…' : 'No relatives in common'))),
