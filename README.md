@@ -37,9 +37,10 @@ The comparison page shows, for each relative in common:
 - This is a proof of concept.
 - Only the first five relatives are compared for now.
 - Loading relatives also saves them to IndexedDB (via Dexie, in the
-  `relatives-in-common` database): one row per selected profile and relative,
-  with name, initials, IBD proportion, side flags, segment count, and largest
-  segment.
+  `relatives-in-common` database): one record per selected profile, keyed by
+  its profile id, holding its relatives with name, initials, IBD proportion,
+  side flags, segment count, and largest segment, sorted by IBD proportion
+  (highest first).
 - The comparison is fetched once and then opened instantly.
 - If you see a sign-in page or a Cloudflare check, open
   <https://you.23andme.com/> in a normal tab, sign in / clear the check, then reload

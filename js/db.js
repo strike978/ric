@@ -1,9 +1,11 @@
 /*
  * Relative storage
  *
- * IndexedDB via Dexie. A loaded relatives list is stored per selected profile,
- * keyed by (profile_id, relative_profile_id), so loading a profile again
- * replaces its previous rows.
+ * IndexedDB via Dexie. Each selected profile gets one record keyed by its
+ * profile id, holding that profile's relatives as an array sorted by IBD
+ * proportion. Loading a profile again replaces its record.
+ *
+ * The database is a development cache with a single schema version.
  */
 
 import Dexie from '../vendor/dexie.mjs';
@@ -11,9 +13,7 @@ import Dexie from '../vendor/dexie.mjs';
 const db = new Dexie('relatives-in-common');
 
 db.version(1).stores({
-  // Compound primary key identifies one relative within one profile.
-  // profile_id is indexed so a profile's rows can be read or replaced in one go.
-  relatives: '[profile_id+relative_profile_id], profile_id',
+  profiles: 'profile_id',
 });
 
 // The fields kept for each relative.
@@ -29,30 +29,48 @@ const RELATIVE_FIELDS = [
   'max_segment_length',
 ];
 
-function recordFor(profileId, relative) {
-  const record = { profile_id: profileId };
+function relativeRecord(relative) {
+  const record = {};
   for (const field of RELATIVE_FIELDS) {
     record[field] = relative[field] === undefined ? null : relative[field];
   }
   return record;
 }
 
-// Replaces the stored relatives for one profile.
+// Missing or non-numeric proportions sort last.
+function ibdValue(relative) {
+  const value = Number(relative.ibd_proportion);
+  return Number.isFinite(value) ? value : -Infinity;
+}
+
+function byIbdDescending(a, b) {
+  return ibdValue(b) - ibdValue(a);
+}
+
+// Replaces the record for one profile, highest IBD proportion first.
 export async function saveRelatives(profileId, relatives) {
   if (!profileId) return;
 
-  const records = relatives
-    .filter((relative) => relative && relative.relative_profile_id)
-    .map((relative) => recordFor(profileId, relative));
+  // One entry per relative, even if the response repeats an id.
+  const unique = new Map();
+  for (const relative of relatives) {
+    if (relative && relative.relative_profile_id) {
+      unique.set(relative.relative_profile_id, relative);
+    }
+  }
 
-  await db.transaction('rw', db.relatives, async () => {
-    await db.relatives.where('profile_id').equals(profileId).delete();
-    if (records.length > 0) await db.relatives.bulkPut(records);
-  });
+  const list = [...unique.values()]
+    .map(relativeRecord)
+    .sort(byIbdDescending);
+
+  await db.profiles.put({ profile_id: profileId, relatives: list });
 }
 
-// Reads the stored relatives for one profile.
+// Reads one profile's relatives, highest IBD proportion first.
 export async function getRelatives(profileId) {
   if (!profileId) return [];
-  return db.relatives.where('profile_id').equals(profileId).toArray();
+  const record = await db.profiles.get(profileId);
+  return record && Array.isArray(record.relatives)
+    ? record.relatives.sort(byIbdDescending)
+    : [];
 }
