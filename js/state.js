@@ -9,7 +9,6 @@
 export const mainState = {
   phase: 'loading',          // loading | ready | error
   profiles: [],
-  currentProfileID: null,
   selectedId: '',
   relatives: [],
   relativesPhase: 'idle',    // idle | loading | ready | error

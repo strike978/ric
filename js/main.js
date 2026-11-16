@@ -107,13 +107,13 @@ async function loadProfiles() {
 
     if (!result.data || result.data.profiles.length === 0) {
       state.phase = 'error';
-      state.notice = 'Sign in at https://you.23andme.com/ and reload.';
+      state.notice = (result.error ? result.error + ' ' : '')
+        + 'Sign in at https://you.23andme.com/ and reload.';
       return;
     }
 
     state.profiles = result.data.profiles;
-    state.currentProfileID = result.data.currentProfileID;
-    const current = state.profiles.find((profile) => profile.id === state.currentProfileID);
+    const current = state.profiles.find((profile) => profile.id === result.data.currentProfileID);
     state.selectedId = current ? current.id : '';
     state.phase = 'ready';
   } catch (err) {

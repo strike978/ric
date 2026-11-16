@@ -32,10 +32,6 @@ function createDb() {
 
 let db = createDb();
 
-function relativeRecord(relative) {
-  return { ...relative };
-}
-
 // Missing or non-numeric proportions sort last.
 function ibdValue(relative) {
   const value = Number(relative.ibd_proportion);
@@ -58,20 +54,9 @@ export async function saveRelatives(profileId, relatives) {
     }
   }
 
-  const list = [...unique.values()]
-    .map(relativeRecord)
-    .sort(byIbdDescending);
+  const list = [...unique.values()].sort(byIbdDescending);
 
   await db.profile_relatives.put({ profile_id: profileId, relatives: list });
-}
-
-// Reads one profile's relatives, highest IBD proportion first.
-export async function getRelatives(profileId) {
-  if (!profileId) return [];
-  const record = await db.profile_relatives.get(profileId);
-  return record && Array.isArray(record.relatives)
-    ? record.relatives.sort(byIbdDescending)
-    : [];
 }
 
 // Stores the relatives in common for one profile + relative pair, keeping
