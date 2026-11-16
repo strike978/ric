@@ -12,6 +12,7 @@
 
 import { mainState as state } from './state.js';
 import { extractProfiles } from './profiles.js';
+import { saveRelatives } from './db.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
 const COMPARISON_FIELDS = [
@@ -43,8 +44,11 @@ function pickRelatives(payload) {
     first_name: relative.first_name,
     last_name: relative.last_name,
     is_open_sharing: relative.is_open_sharing,
+    ibd_proportion: relative.ibd_proportion,
     is_maternal_side: relative.is_maternal_side,
     is_paternal_side: relative.is_paternal_side,
+    num_segments: relative.num_segments,
+    max_segment_length: relative.max_segment_length,
   }));
 }
 
@@ -161,14 +165,15 @@ async function loadProfiles() {
   }
 }
 
-// Loads the DNA relatives list for the selected profile.
+// Loads the DNA relatives list for the selected profile and saves it locally.
 async function loadRelatives() {
   if (!state.selectedId) return;
 
+  const profileId = state.selectedId;
   const seq = ++relativesSeq;
   if (relativesXhr) relativesXhr.abort();
 
-  const url = relativesUrl(state.selectedId);
+  const url = relativesUrl(profileId);
 
   state.relativesPhase = 'loading';
   state.relatives = [];
@@ -180,12 +185,25 @@ async function loadRelatives() {
     const xhr = await xhrGet(url, (request) => { relativesXhr = request; });
     if (seq !== relativesSeq) return;
 
+    let relatives;
     try {
-      state.relatives = pickRelatives(JSON.parse(xhr.responseText));
-      state.relativesPhase = 'ready';
+      relatives = pickRelatives(JSON.parse(xhr.responseText));
     } catch {
       state.relativesPhase = 'error';
       state.notice = 'Relatives response was not JSON.';
+      return;
+    }
+
+    if (seq !== relativesSeq) return;
+
+    state.relatives = relatives;
+    state.relativesPhase = 'ready';
+
+    try {
+      await saveRelatives(profileId, relatives);
+    } catch (err) {
+      console.warn('Could not save relatives to IndexedDB', err);
+      state.notice = 'Relatives loaded, but could not be saved to the local database.';
     }
   } catch (err) {
     if (seq !== relativesSeq || (err && err.name === 'AbortError')) return;
