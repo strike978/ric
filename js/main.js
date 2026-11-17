@@ -96,6 +96,18 @@ function xhrGet(url, register) {
 
 /* ---------- Loading profiles and relatives ---------- */
 
+// True when the request ended up on a 23andMe sign-in page, i.e. the browser
+// session is not signed in (or the request did not carry the session cookie).
+function isLoginUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'auth.23andme.com'
+      || /(^|\/)login(\/|$)/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
 // Reads the profiles from the home page response.
 async function loadProfiles() {
   try {
@@ -108,12 +120,39 @@ async function loadProfiles() {
     });
 
     const html = await res.text();
+    const finalUrl = res.url || TARGET_URL;
+
+    // Useful when the extension seems to think you are signed out: this shows
+    // whether 23andMe redirected to the login page and with what status.
+    console.debug('23andMe profile request', {
+      status: res.status,
+      ok: res.ok,
+      redirected: res.redirected,
+      finalUrl,
+    });
+
+    if (isLoginUrl(finalUrl)) {
+      state.phase = 'error';
+      state.notice = 'Sign in to 23andMe and reload.';
+      state.noticeLink = TARGET_URL;
+      return;
+    }
+
+    if (!res.ok) {
+      state.phase = 'error';
+      state.notice = '23andMe returned an error (HTTP ' + res.status
+        + '). Open 23andMe, make sure you are signed in, then reload.';
+      state.noticeLink = TARGET_URL;
+      return;
+    }
+
     const result = extractProfiles(html);
 
     if (!result.data || result.data.profiles.length === 0) {
       if (result.error) console.warn('Could not read profiles:', result.error);
       state.phase = 'error';
-      state.notice = 'Sign in to 23andMe and reload.';
+      state.notice = '23andMe did not return your profiles. Open 23andMe, '
+        + 'make sure you are signed in, then reload.';
       state.noticeLink = TARGET_URL;
       return;
     }
@@ -125,7 +164,7 @@ async function loadProfiles() {
   } catch (err) {
     console.warn('Could not load profiles:', err);
     state.phase = 'error';
-    state.notice = 'Sign in to 23andMe and reload.';
+    state.notice = 'Could not reach 23andMe. Check your connection, then reload.';
     state.noticeLink = TARGET_URL;
   } finally {
     m.redraw.sync();
@@ -147,10 +186,32 @@ async function loadRelatives() {
   cancelComparisons();
   state.comparisons = {};
   state.notice = '';
+  state.noticeLink = '';
 
   try {
     const xhr = await xhrGet(url, (request) => { relativesXhr = request; });
     if (seq !== relativesSeq) return;
+
+    const finalUrl = xhr.responseURL || url;
+    console.debug('23andMe relatives request', {
+      status: xhr.status,
+      finalUrl,
+    });
+
+    if (isLoginUrl(finalUrl)) {
+      state.relativesPhase = 'error';
+      state.notice = 'Sign in to 23andMe and reload.';
+      state.noticeLink = TARGET_URL;
+      return;
+    }
+
+    if (xhr.status < 200 || xhr.status >= 300) {
+      state.relativesPhase = 'error';
+      state.notice = '23andMe returned an error (HTTP ' + xhr.status
+        + ') while loading relatives. Open 23andMe, make sure you are signed in, then reload.';
+      state.noticeLink = TARGET_URL;
+      return;
+    }
 
     let relatives;
     try {
