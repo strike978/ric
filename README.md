@@ -4,8 +4,8 @@ A proof-of-concept Chromium extension for getting 23andMe **relatives in common*
 a 23andMe profile.
 
 It uses the 23andMe session already open in your browser. There is no separate login
-and no password is stored. Pick a profile, load up to 10 of its DNA relatives, and
-ask for each one's relatives-in-common list.
+and no password is stored. Pick a profile, load its DNA relatives, and ask for each
+one's relatives-in-common list.
 
 ## Install
 
@@ -39,8 +39,8 @@ The comparison page shows, for each relative in common:
 ## Notes
 
 - This is a proof of concept.
-- **Load relatives** fetches up to 10 relatives, and comparisons are fetched for
-  all of them.
+- **Load relatives** fetches the profile's DNA relatives, and comparisons are
+  fetched for all of them.
 - Loading relatives also saves them to IndexedDB (via Dexie, in the
   `relatives-in-common` database): one record in `profile_relatives` per
   selected profile, keyed by its profile id, holding its relatives with every
