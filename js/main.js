@@ -3,7 +3,8 @@
  *
  * 1. GET you.23andme.com and read the signed-in profiles from the inline
  *    quickInviteModal data (see profiles.js).
- * 2. Load the selected profile's DNA relatives.
+ * 2. Load the selected profile's DNA relatives as soon as a profile is picked;
+ *    a spinner shows while they load.
  * 3. Fetch relatives-in-common for every loaded relative, one at a time, with a
  *    one second gap. Only the active row shows a spinner; then it gets an Open
  *    button. If a fetch fails, the same relative is retried every 10 seconds
@@ -119,8 +120,7 @@ async function loadProfiles() {
 
     state.noticeLink = '';
     state.profiles = result.data.profiles;
-    const current = state.profiles.find((profile) => profile.id === result.data.currentProfileID);
-    state.selectedId = current ? current.id : '';
+    state.selectedId = '';
     state.phase = 'ready';
   } catch (err) {
     console.warn('Could not load profiles:', err);
@@ -441,17 +441,15 @@ const App = {
             disabled: state.phase !== 'ready',
             value: state.selectedId,
             onchange: (event) => {
-              relativesSeq++;
-              if (relativesXhr) {
-                relativesXhr.abort();
-                relativesXhr = null;
-              }
               state.selectedId = event.target.value;
               state.relatives = [];
               state.relativesPhase = 'idle';
               cancelComparisons();
               state.comparisons = {};
               state.notice = '';
+
+              // Picking a profile loads its relatives right away.
+              loadRelatives();
             },
           }, [
             m('option', { value: '', selected: state.selectedId === '' }, placeholder),
@@ -467,12 +465,6 @@ const App = {
           ]),
 
           m('div.button-row', [
-            m('button#loadRelatives.primary', {
-              type: 'button',
-              disabled: !state.selectedId || state.relativesPhase === 'loading',
-              onclick: loadRelatives,
-            }, state.relativesPhase === 'loading' ? 'Loading…' : 'Load relatives'),
-
             m('button#getRelatives.secondary', {
               type: 'button',
               disabled: state.relatives.length === 0,
@@ -490,21 +482,33 @@ const App = {
             m('p.progress-label', { 'aria-live': 'polite' }, progressText),
           ]),
 
-          m('div#relativesOutput', { class: state.relatives.length ? 'output' : 'output hidden' }, [
+          m('div#relativesOutput', {
+            class: state.relativesPhase === 'loading'
+              || state.relativesPhase === 'error'
+              || state.relatives.length
+              ? 'output' : 'output hidden',
+          }, [
             m('div.table-wrap', m('table.relatives-table', [
               m('thead', m('tr', [
+                m('th.num-col', '#'),
                 m('th', 'Initials'),
                 m('th', 'Relative profile ID'),
                 m('th.actions-col', 'Relatives in common'),
               ])),
-              m('tbody#relativesBody', state.relatives.length
-                ? state.relatives.map((relative, index) => m('tr', { key: relative.relative_profile_id || index }, [
-                    m('td', relative.initials || ''),
-                    m('td.id', relative.relative_profile_id || ''),
-                    m('td.actions', actionFor(relative)),
+              m('tbody#relativesBody', state.relativesPhase === 'loading'
+                ? m('tr', m('td.empty', { colspan: 4 }, [
+                    m('span.spinner'),
+                    ' Loading relatives…',
                   ]))
-                : m('tr', m('td.empty', { colspan: 3 },
-                    state.relativesPhase === 'error' ? 'Request failed' : 'No relatives'))),
+                : state.relatives.length
+                  ? state.relatives.map((relative, index) => m('tr', { key: relative.relative_profile_id || index }, [
+                      m('td.num', index + 1),
+                      m('td', relative.initials || ''),
+                      m('td.id', relative.relative_profile_id || ''),
+                      m('td.actions', actionFor(relative)),
+                    ]))
+                  : m('tr', m('td.empty', { colspan: 4 },
+                      state.relativesPhase === 'error' ? 'Request failed' : 'No relatives'))),
             ])),
           ]),
 

@@ -18,15 +18,15 @@ one's relatives-in-common list.
 
 1. Make sure you are signed in at <https://you.23andme.com> in this browser.
 2. Click the extension icon.
-3. Pick a profile from the menu.
-4. Click **Load relatives** to see that profile's DNA relatives.
-5. Click **Get relatives in common** to fetch comparisons for the loaded
+3. Pick a profile from the menu. That profile's DNA relatives load right away,
+   with a spinner in the table.
+4. Click **Get relatives in common** to fetch comparisons for the loaded
    relatives. A spinner shows on the row being fetched; it becomes **Open** when
    ready. A progress bar shows how many are done and roughly how long is left.
    If a fetch fails, that same relative is retried every 10 seconds instead of
    being skipped. Click **Stop** to cancel the run.
-6. Click **Open** to see the relatives in common for that pair.
-7. Click **Delete database** at the bottom of the panel to delete the whole
+5. Click **Open** to see the relatives in common for that pair.
+6. Click **Delete database** at the bottom of the panel to delete the whole
    local database (all saved relatives and relatives-in-common data) from this
    browser.
 
@@ -41,8 +41,8 @@ The comparison page shows, for each relative in common:
 ## Notes
 
 - This is a proof of concept.
-- **Load relatives** fetches the profile's DNA relatives, and comparisons are
-  fetched for all of them.
+- Picking a profile fetches its DNA relatives, and comparisons are fetched for
+  all of them.
 - Loading relatives also saves them to IndexedDB (via Dexie, in the
   `relatives-in-common` database): one record in `profile_relatives` per
   selected profile, keyed by its profile id, holding its relatives with every
