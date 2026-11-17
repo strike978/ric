@@ -14,6 +14,7 @@ export const mainState = {
   relativesPhase: 'idle',    // idle | loading | ready | error
   comparisons: {},           // relative id -> loading | ready | error
   comparisonsRunning: false,
+  comparisonProgress: null,  // { total, done, remainingMs } while fetching
   clearing: false,
   notice: '',
 };

@@ -22,7 +22,7 @@ ask for each one's relatives-in-common list.
 4. Click **Load relatives** to see that profile's DNA relatives.
 5. Click **Get relatives in common** to fetch comparisons for the loaded
    relatives. A spinner shows on the row being fetched; it becomes **Open** when
-   ready.
+   ready. A progress bar shows how many are done and roughly how long is left.
 6. Click **Open** to see the relatives in common for that pair.
 7. Click **Delete database** at the bottom of the panel to delete the whole
    local database (all saved relatives and relatives-in-common data) from this

@@ -19,6 +19,7 @@ const TARGET_URL = 'https://you.23andme.com/';
 
 let relativesXhr = null;
 let relativesSeq = 0;
+let comparisonsSeq = 0;
 
 /* ---------- Response shapes ---------- */
 
@@ -134,8 +135,8 @@ async function loadRelatives() {
 
   state.relativesPhase = 'loading';
   state.relatives = [];
+  cancelComparisons();
   state.comparisons = {};
-  state.comparisonsRunning = false;
   state.notice = '';
 
   try {
@@ -180,6 +181,15 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function formatRemaining(ms) {
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  if (seconds < 60) return seconds + 's';
+
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return minutes + 'm' + (rest ? ' ' + rest + 's' : '');
+}
+
 // Marks rows whose relatives-in-common data is already saved for this profile.
 async function restoreSavedComparisons(profileId, seq) {
   try {
@@ -197,6 +207,13 @@ async function restoreSavedComparisons(profileId, seq) {
   }
 }
 
+// Stops an in-flight comparison loop and clears its progress.
+function cancelComparisons() {
+  comparisonsSeq++;
+  state.comparisonsRunning = false;
+  state.comparisonProgress = null;
+}
+
 // Fetches comparisons that are not already saved for every loaded relative,
 // sequentially, 1s apart. The row being fetched shows a spinner; finished rows
 // get an Open button.
@@ -206,33 +223,67 @@ async function getRelativesInCommon() {
   const profileId = state.selectedId;
   const targets = state.relatives.filter((relative) => relative.relative_profile_id
     && state.comparisons[relative.relative_profile_id] !== 'ready');
+  const total = targets.length;
+
+  if (total === 0) return;
+
+  const seq = ++comparisonsSeq;
+  const startedAt = Date.now();
 
   state.comparisonsRunning = true;
   state.notice = '';
+  state.comparisonProgress = {
+    total,
+    done: 0,
+    remainingMs: total * 1000,
+  };
   m.redraw.sync();
 
-  for (let index = 0; index < targets.length; index++) {
-    const relativeId = targets[index].relative_profile_id;
+  for (let index = 0; index < total; index++) {
+    if (seq !== comparisonsSeq) return;
 
+    const relativeId = targets[index].relative_profile_id;
+    const elapsed = Date.now() - startedAt;
+    const average = index > 0 ? elapsed / index : 1000;
+
+    state.comparisonProgress = {
+      total,
+      done: index,
+      remainingMs: (total - index) * average,
+    };
     state.comparisons[relativeId] = 'loading';
     m.redraw.sync();
 
     try {
       const xhr = await xhrGet(comparisonUrl(profileId, relativeId));
+      if (seq !== comparisonsSeq) return;
+
       const relativesInCommon = extractCommonRelatives(JSON.parse(xhr.responseText));
 
       await saveRelativesInCommon(profileId, relativeId, relativesInCommon);
+      if (seq !== comparisonsSeq) return;
+
       state.comparisons[relativeId] = 'ready';
     } catch {
+      if (seq !== comparisonsSeq) return;
       state.comparisons[relativeId] = 'error';
     }
 
+    state.comparisonProgress = {
+      total,
+      done: index + 1,
+      remainingMs: (total - index - 1) * average,
+    };
     m.redraw.sync();
 
-    if (index < targets.length - 1) await sleep(1000);
+    if (index < total - 1) {
+      await sleep(1000);
+      if (seq !== comparisonsSeq) return;
+    }
   }
 
   state.comparisonsRunning = false;
+  state.comparisonProgress = null;
   m.redraw.sync();
 }
 
@@ -257,6 +308,7 @@ async function deleteData() {
   );
   if (!confirmed) return;
 
+  cancelComparisons();
   state.clearing = true;
   state.notice = '';
   m.redraw.sync();
@@ -299,6 +351,17 @@ const App = {
       ? 'Loading…'
       : state.phase === 'error' ? 'No profiles found' : 'Choose a profile…';
 
+    const progress = state.comparisonProgress;
+    const progressPercent = progress
+      ? Math.round((progress.done / progress.total) * 100)
+      : 0;
+    const progressText = progress
+      ? progress.done + ' of ' + progress.total
+        + (progress.done < progress.total
+          ? ' · about ' + formatRemaining(progress.remainingMs) + ' left'
+          : ' · finishing…')
+      : '';
+
     return [
       m('header.topbar', m('div.brand', [
         m('div.mark', { 'aria-hidden': 'true' }, [m('span'), m('span')]),
@@ -321,8 +384,8 @@ const App = {
               state.selectedId = event.target.value;
               state.relatives = [];
               state.relativesPhase = 'idle';
+              cancelComparisons();
               state.comparisons = {};
-              state.comparisonsRunning = false;
               state.notice = '';
             },
           }, [
@@ -350,6 +413,16 @@ const App = {
               disabled: state.relatives.length === 0 || state.comparisonsRunning,
               onclick: getRelativesInCommon,
             }, state.comparisonsRunning ? 'Getting…' : 'Get relatives in common'),
+          ]),
+
+          m('div.progress', { class: progress ? 'progress' : 'progress hidden' }, [
+            m('div.progress-track', {
+              role: 'progressbar',
+              'aria-valuemin': 0,
+              'aria-valuemax': progress ? progress.total : 0,
+              'aria-valuenow': progress ? progress.done : 0,
+            }, m('div.progress-fill', { style: { width: progressPercent + '%' } })),
+            m('p.progress-label', { 'aria-live': 'polite' }, progressText),
           ]),
 
           m('div#relativesOutput', { class: state.relatives.length ? 'output' : 'output hidden' }, [
