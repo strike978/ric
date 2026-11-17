@@ -75,6 +75,14 @@ export async function saveRelativesInCommon(profileId, relativeId, relatives) {
   });
 }
 
+// Reads every saved pair for one profile.
+export async function getProfileRelativesInCommon(profileId) {
+  if (!profileId) return [];
+
+  const record = await db.relatives_in_common.get(profileId);
+  return record && Array.isArray(record.pairs) ? record.pairs : [];
+}
+
 // Reads one pair's relatives in common.
 export async function getRelativesInCommon(profileId, relativeId) {
   if (!profileId || !relativeId) return null;

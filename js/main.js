@@ -4,20 +4,18 @@
  * 1. GET you.23andme.com and read the signed-in profiles from the inline
  *    quickInviteModal data (see profiles.js).
  * 2. Load the selected profile's DNA relatives.
- * 3. Fetch relatives-in-common for the first two rows, one at a time, with a
+ * 3. Fetch relatives-in-common for every loaded relative, one at a time, with a
  *    one second gap. Only the active row shows a spinner; then it gets an Open
  *    button.
- * 4. Save each pair's first two relatives in common to IndexedDB so
- *    compare.html can render them.
+ * 4. Save all of each pair's relatives in common to IndexedDB so compare.html
+ *    can render them.
  */
 
 import { mainState as state } from './state.js';
 import { extractProfiles } from './profiles.js';
-import { saveRelatives, saveRelativesInCommon, deleteDatabase } from './db.js';
+import { saveRelatives, saveRelativesInCommon, getProfileRelativesInCommon, deleteDatabase } from './db.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
-const COMPARISON_LIMIT = 2;
-const COMPARISON_ENTRY_LIMIT = 2;
 
 let relativesXhr = null;
 let relativesSeq = 0;
@@ -61,7 +59,7 @@ function extractCommonRelatives(payload) {
 
 function relativesUrl(profileId) {
   return 'https://you.23andme.com/p/' + encodeURIComponent(profileId)
-    + '/family/relatives/ajax/?limit=2';
+    + '/family/relatives/ajax/';
 }
 
 function comparisonUrl(profileId, relativeId) {
@@ -164,6 +162,8 @@ async function loadRelatives() {
       console.warn('Could not save relatives to IndexedDB', err);
       state.notice = 'Relatives loaded, but could not be saved to the local database.';
     }
+
+    await restoreSavedComparisons(profileId, seq);
   } catch (err) {
     if (seq !== relativesSeq || (err && err.name === 'AbortError')) return;
     state.relativesPhase = 'error';
@@ -180,15 +180,33 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Fetches the first COMPARISON_LIMIT comparisons sequentially, 1s apart. The
-// row being fetched shows a spinner; finished rows get an Open button.
+// Marks rows whose relatives-in-common data is already saved for this profile.
+async function restoreSavedComparisons(profileId, seq) {
+  try {
+    const pairs = await getProfileRelativesInCommon(profileId);
+    if (seq !== relativesSeq) return;
+
+    state.comparisons = {};
+    for (const pair of pairs) {
+      if (pair && pair.relative_profile_id) {
+        state.comparisons[pair.relative_profile_id] = 'ready';
+      }
+    }
+  } catch (err) {
+    console.warn('Could not read saved relatives in common', err);
+  }
+}
+
+// Fetches comparisons that are not already saved for every loaded relative,
+// sequentially, 1s apart. The row being fetched shows a spinner; finished rows
+// get an Open button.
 async function getRelativesInCommon() {
   if (!state.selectedId || state.relatives.length === 0 || state.comparisonsRunning) return;
 
   const profileId = state.selectedId;
-  const targets = state.relatives.slice(0, COMPARISON_LIMIT);
+  const targets = state.relatives.filter((relative) => relative.relative_profile_id
+    && state.comparisons[relative.relative_profile_id] !== 'ready');
 
-  state.comparisons = {};
   state.comparisonsRunning = true;
   state.notice = '';
   m.redraw.sync();
@@ -196,23 +214,20 @@ async function getRelativesInCommon() {
   for (let index = 0; index < targets.length; index++) {
     const relativeId = targets[index].relative_profile_id;
 
-    if (relativeId) {
-      state.comparisons[relativeId] = 'loading';
-      m.redraw.sync();
+    state.comparisons[relativeId] = 'loading';
+    m.redraw.sync();
 
-      try {
-        const xhr = await xhrGet(comparisonUrl(profileId, relativeId));
-        const relativesInCommon = extractCommonRelatives(JSON.parse(xhr.responseText))
-          .slice(0, COMPARISON_ENTRY_LIMIT);
+    try {
+      const xhr = await xhrGet(comparisonUrl(profileId, relativeId));
+      const relativesInCommon = extractCommonRelatives(JSON.parse(xhr.responseText));
 
-        await saveRelativesInCommon(profileId, relativeId, relativesInCommon);
-        state.comparisons[relativeId] = 'ready';
-      } catch {
-        state.comparisons[relativeId] = 'error';
-      }
-
-      m.redraw.sync();
+      await saveRelativesInCommon(profileId, relativeId, relativesInCommon);
+      state.comparisons[relativeId] = 'ready';
+    } catch {
+      state.comparisons[relativeId] = 'error';
     }
+
+    m.redraw.sync();
 
     if (index < targets.length - 1) await sleep(1000);
   }
@@ -263,9 +278,7 @@ async function deleteData() {
 
 /* ---------- View ---------- */
 
-function actionFor(relative, index) {
-  if (index >= COMPARISON_LIMIT) return null;
-
+function actionFor(relative) {
   const relativeId = relative.relative_profile_id;
   const status = state.comparisons[relativeId];
 
@@ -350,7 +363,7 @@ const App = {
                 ? state.relatives.map((relative, index) => m('tr', { key: relative.relative_profile_id || index }, [
                     m('td', relative.initials || ''),
                     m('td.id', relative.relative_profile_id || ''),
-                    m('td.actions', actionFor(relative, index)),
+                    m('td.actions', actionFor(relative)),
                   ]))
                 : m('tr', m('td.empty', { colspan: 3 },
                     state.relativesPhase === 'error' ? 'Request failed' : 'No relatives'))),
