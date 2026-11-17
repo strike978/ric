@@ -6,7 +6,8 @@
  * 2. Load the selected profile's DNA relatives.
  * 3. Fetch relatives-in-common for every loaded relative, one at a time, with a
  *    one second gap. Only the active row shows a spinner; then it gets an Open
- *    button.
+ *    button. If a fetch fails, the same relative is retried every 10 seconds
+ *    instead of moving on to the next one.
  * 4. Save all of each pair's relatives in common to IndexedDB so compare.html
  *    can render them.
  */
@@ -17,7 +18,11 @@ import { saveRelatives, saveRelativesInCommon, getProfileRelativesInCommon, dele
 
 const TARGET_URL = 'https://you.23andme.com/';
 
+const COMPARISON_GAP_MS = 1000;
+const RETRY_DELAY_MS = 10000;
+
 let relativesXhr = null;
+let comparisonXhr = null;
 let relativesSeq = 0;
 let comparisonsSeq = 0;
 
@@ -105,19 +110,23 @@ async function loadProfiles() {
     const result = extractProfiles(html);
 
     if (!result.data || result.data.profiles.length === 0) {
+      if (result.error) console.warn('Could not read profiles:', result.error);
       state.phase = 'error';
-      state.notice = (result.error ? result.error + ' ' : '')
-        + 'Sign in at https://you.23andme.com/ and reload.';
+      state.notice = 'Sign in to 23andMe and reload.';
+      state.noticeLink = TARGET_URL;
       return;
     }
 
+    state.noticeLink = '';
     state.profiles = result.data.profiles;
     const current = state.profiles.find((profile) => profile.id === result.data.currentProfileID);
     state.selectedId = current ? current.id : '';
     state.phase = 'ready';
   } catch (err) {
+    console.warn('Could not load profiles:', err);
     state.phase = 'error';
-    state.notice = err && err.message ? err.message : String(err);
+    state.notice = 'Sign in to 23andMe and reload.';
+    state.noticeLink = TARGET_URL;
   } finally {
     m.redraw.sync();
   }
@@ -212,11 +221,32 @@ function cancelComparisons() {
   comparisonsSeq++;
   state.comparisonsRunning = false;
   state.comparisonProgress = null;
+
+  if (comparisonXhr) {
+    comparisonXhr.abort();
+    comparisonXhr = null;
+  }
+
+  // Clear rows that were mid-flight so they don't keep spinning.
+  for (const relativeId of Object.keys(state.comparisons)) {
+    const status = state.comparisons[relativeId];
+    if (status === 'loading' || status === 'retrying') delete state.comparisons[relativeId];
+  }
+}
+
+// Stops the running comparison loop from the Stop button.
+function stopComparisons() {
+  if (!state.comparisonsRunning) return;
+
+  cancelComparisons();
+  state.notice = '';
+  m.redraw.sync();
 }
 
 // Fetches comparisons that are not already saved for every loaded relative,
-// sequentially, 1s apart. The row being fetched shows a spinner; finished rows
-// get an Open button.
+// sequentially, 1s apart. A failed fetch does not skip ahead: the same
+// relative is retried after 10s until it succeeds or the run is stopped. The
+// row being fetched shows a spinner; finished rows get an Open button.
 async function getRelativesInCommon() {
   if (!state.selectedId || state.relatives.length === 0 || state.comparisonsRunning) return;
 
@@ -235,40 +265,74 @@ async function getRelativesInCommon() {
   state.comparisonProgress = {
     total,
     done: 0,
-    remainingMs: total * 1000,
+    remainingMs: total * COMPARISON_GAP_MS,
   };
   m.redraw.sync();
 
   for (let index = 0; index < total; index++) {
     if (seq !== comparisonsSeq) return;
 
-    const relativeId = targets[index].relative_profile_id;
+    const relative = targets[index];
+    const relativeId = relative.relative_profile_id;
     const elapsed = Date.now() - startedAt;
-    const average = index > 0 ? elapsed / index : 1000;
+    const average = index > 0 ? elapsed / index : COMPARISON_GAP_MS;
 
     state.comparisonProgress = {
       total,
       done: index,
       remainingMs: (total - index) * average,
     };
-    state.comparisons[relativeId] = 'loading';
     m.redraw.sync();
 
-    try {
-      const xhr = await xhrGet(comparisonUrl(profileId, relativeId));
+    // Retry this same relative until it succeeds; never move on after a
+    // failure.
+    for (;;) {
       if (seq !== comparisonsSeq) return;
 
-      const relativesInCommon = extractCommonRelatives(JSON.parse(xhr.responseText));
+      state.comparisons[relativeId] = 'loading';
+      state.notice = '';
+      m.redraw.sync();
 
-      await saveRelativesInCommon(profileId, relativeId, relativesInCommon);
-      if (seq !== comparisonsSeq) return;
+      try {
+        const xhr = await xhrGet(
+          comparisonUrl(profileId, relativeId),
+          (request) => { comparisonXhr = request; },
+        );
+        comparisonXhr = null;
+        if (seq !== comparisonsSeq) return;
 
-      state.comparisons[relativeId] = 'ready';
-    } catch {
-      if (seq !== comparisonsSeq) return;
-      state.comparisons[relativeId] = 'error';
+        if (xhr.status < 200 || xhr.status >= 300) {
+          throw new Error('HTTP ' + xhr.status);
+        }
+
+        let payload;
+        try {
+          payload = JSON.parse(xhr.responseText);
+        } catch {
+          throw new Error('response was not JSON');
+        }
+
+        const relativesInCommon = extractCommonRelatives(payload);
+
+        await saveRelativesInCommon(profileId, relativeId, relativesInCommon);
+        if (seq !== comparisonsSeq) return;
+        break;
+      } catch (err) {
+        if (seq !== comparisonsSeq) return;
+
+        state.comparisons[relativeId] = 'retrying';
+        state.notice = 'Could not get relatives in common for '
+          + (relative.initials || relativeId) + ' ('
+          + (err && err.message ? err.message : String(err))
+          + '). Retrying in 10 seconds…';
+        m.redraw.sync();
+
+        await sleep(RETRY_DELAY_MS);
+        if (seq !== comparisonsSeq) return;
+      }
     }
 
+    state.comparisons[relativeId] = 'ready';
     state.comparisonProgress = {
       total,
       done: index + 1,
@@ -277,7 +341,7 @@ async function getRelativesInCommon() {
     m.redraw.sync();
 
     if (index < total - 1) {
-      await sleep(1000);
+      await sleep(COMPARISON_GAP_MS);
       if (seq !== comparisonsSeq) return;
     }
   }
@@ -335,6 +399,7 @@ function actionFor(relative) {
   const status = state.comparisons[relativeId];
 
   if (status === 'loading') return m('span.spinner', { title: 'Loading' });
+  if (status === 'retrying') return m('span.action-retry', { title: 'Failed; retrying in 10 seconds' }, 'Retrying…');
   if (status === 'ready') {
     return m('button.link-button', {
       type: 'button',
@@ -410,9 +475,9 @@ const App = {
 
             m('button#getRelatives.secondary', {
               type: 'button',
-              disabled: state.relatives.length === 0 || state.comparisonsRunning,
-              onclick: getRelativesInCommon,
-            }, state.comparisonsRunning ? 'Getting…' : 'Get relatives in common'),
+              disabled: state.relatives.length === 0,
+              onclick: state.comparisonsRunning ? stopComparisons : getRelativesInCommon,
+            }, state.comparisonsRunning ? 'Stop' : 'Get relatives in common'),
           ]),
 
           m('div.progress', { class: progress ? 'progress' : 'progress hidden' }, [
@@ -453,7 +518,16 @@ const App = {
           ]),
         ]),
 
-        m('p#notice', { class: state.notice ? 'notice' : 'notice hidden' }, state.notice),
+        m('p#notice', { class: state.notice ? 'notice' : 'notice hidden' }, [
+          state.notice,
+          state.noticeLink
+            ? m('a.notice-link', {
+                href: state.noticeLink,
+                target: '_blank',
+                rel: 'noopener noreferrer',
+              }, 'Open 23andMe')
+            : null,
+        ]),
       ]),
     ];
   },

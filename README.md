@@ -23,6 +23,8 @@ one's relatives-in-common list.
 5. Click **Get relatives in common** to fetch comparisons for the loaded
    relatives. A spinner shows on the row being fetched; it becomes **Open** when
    ready. A progress bar shows how many are done and roughly how long is left.
+   If a fetch fails, that same relative is retried every 10 seconds instead of
+   being skipped. Click **Stop** to cancel the run.
 6. Click **Open** to see the relatives in common for that pair.
 7. Click **Delete database** at the bottom of the panel to delete the whole
    local database (all saved relatives and relatives-in-common data) from this

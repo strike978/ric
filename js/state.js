@@ -12,11 +12,12 @@ export const mainState = {
   selectedId: '',
   relatives: [],
   relativesPhase: 'idle',    // idle | loading | ready | error
-  comparisons: {},           // relative id -> loading | ready | error
+  comparisons: {},           // relative id -> loading | retrying | ready | error
   comparisonsRunning: false,
   comparisonProgress: null,  // { total, done, remainingMs } while fetching
   clearing: false,
   notice: '',
+  noticeLink: '',          // optional URL shown as a link next to the notice
 };
 
 // Relatives-in-common page: one pair, read from the database.

@@ -200,6 +200,7 @@ select:disabled { opacity: 0.6; }
 }
 
 .action-error { color: #ff8d9c; font-size: 12px; }
+.action-retry { color: #f6d9a2; font-size: 12px; }
 
 /* Fetch progress: bar plus count and estimated time remaining */
 .progress { display: grid; gap: 6px; }
@@ -308,6 +309,16 @@ select:disabled { opacity: 0.6; }
   background: rgba(242, 178, 76, 0.09);
   color: #f6d9a2;
 }
+
+.notice-link {
+  margin-left: 6px;
+  color: #ffd9a0;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.notice-link:hover { color: #ffe9c9; }
+.notice-link:focus-visible { outline: 2px solid #8fb0ff; outline-offset: 2px; }
 
 /* Utility */
 .hidden { display: none !important; }
