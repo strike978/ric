@@ -7,34 +7,18 @@
 
 import { compareState as state } from './state.js';
 import { getRelativesInCommon } from './db.js';
+import { avatar, displayName, profileUrl } from './person.js';
 
 const params = new URLSearchParams(location.search);
 const profileId = params.get('profile') || '';
 const relativeId = params.get('relative') || '';
+const profileName = params.get('profile_name') || profileId;
+const relativeName = params.get('relative_name') || relativeId;
 
 /* ---------- Helpers for one comparison entry ---------- */
 
-function initialsOf(relative) {
-  return [relative.first_initial, relative.last_initial].filter(Boolean).join('');
-}
-
-function nameOf(relative) {
-  return [relative.first_name, relative.last_name].filter(Boolean).join(' ');
-}
-
-function displayName(relative) {
-  return nameOf(relative) || initialsOf(relative) || relative.initials || '—';
-}
-
 function displayValue(value) {
   return value === undefined || value === null || value === '' ? '—' : value;
-}
-
-function relativeProfileUrl(relativeId) {
-  if (!profileId || !relativeId) return null;
-
-  return 'https://you.23andme.com/p/' + encodeURIComponent(profileId)
-    + '/profile/' + encodeURIComponent(relativeId) + '/';
 }
 
 // Finds every prediction index present in the saved rows, so the table shows
@@ -74,6 +58,13 @@ function numberValue(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function percentageLabel(value) {
+  const number = numberValue(value);
+  if (number === null) return '—';
+
+  return Number((number * 100).toFixed(2)) + '%';
+}
+
 // Missing values always sort last, whichever direction is selected.
 function comparePresent(a, b, direction, compare) {
   const aMissing = a === null;
@@ -105,7 +96,7 @@ function sortedRelatives(relatives, sort) {
 /* ---------- Load from IndexedDB ---------- */
 
 async function load() {
-  state.subtitle = profileId && relativeId ? profileId + ' → ' + relativeId : '';
+  state.subtitle = profileName && relativeName ? profileName + ' → ' + relativeName : '';
 
   if (!profileId || !relativeId) {
     state.notice = 'Missing profile or relative id.';
@@ -169,8 +160,7 @@ const App = {
 
           m('div.table-wrap', m('table.relatives-table', [
             m('thead', m('tr', [
-              m('th', { title: 'Name, or initials when no name is shown' }, 'Name'),
-              m('th', 'Profile ID'),
+              m('th', 'Relative'),
               m('th', 'Sharing'),
               ...columns.flatMap((index) => [
                 m('th', 'Rel ' + index),
@@ -179,26 +169,29 @@ const App = {
             ])),
             m('tbody', rows.length
               ? rows.map((relative) => {
-                  const profileUrl = relativeProfileUrl(relative.profile_id);
+                  const personUrl = profileUrl(profileId, relative.profile_id);
+                  const person = [
+                    avatar(relative),
+                    m('span.relative-name', displayName(relative)),
+                  ];
 
                   return m('tr', [
-                    m('td', displayName(relative)),
-                    m('td.id', profileUrl
-                      ? m('a', {
-                          href: profileUrl,
+                    m('td', personUrl
+                      ? m('a.relative.relative-link', {
+                          href: personUrl,
                           target: '_blank',
                           rel: 'noopener noreferrer',
                           title: 'Open this profile on 23andMe',
-                        }, displayValue(relative.profile_id))
-                      : displayValue(relative.profile_id)),
+                        }, person)
+                      : m('div.relative', person)),
                     m('td', relative.is_open_sharing === undefined || relative.is_open_sharing === null ? '—' : (relative.is_open_sharing ? 'yes' : 'no')),
                     ...columns.flatMap((index) => [
                       m('td', displayValue(relative['predicted_relationship_id_' + index])),
-                      m('td', displayValue(relative['ibd_proportion_' + index])),
+                      m('td', percentageLabel(relative['ibd_proportion_' + index])),
                     ]),
                   ]);
                 })
-              : m('tr', m('td.empty', { colspan: 3 + columns.length * 2 },
+              : m('tr', m('td.empty', { colspan: 2 + columns.length * 2 },
                   state.loading ? 'Loading…' : 'No relatives in common'))),
           ])),
         ]),

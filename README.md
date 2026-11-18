@@ -42,11 +42,11 @@ one's relatives-in-common list.
 
 The comparison page shows, for each relative in common:
 
-- name, or initials when no name is shown
-- profile id, linked to the profile on 23andMe
+- avatar and name (or initials when there is no photo), linked to the profile
+  on 23andMe
 - whether they share openly
-- every predicted relationship and IBD proportion returned (usually two)
-- sortable by saved order or any available IBD proportion
+- every predicted relationship and IBD percentage returned (usually two)
+- sortable by saved order or any available IBD percentage
 
 ## Notes
 

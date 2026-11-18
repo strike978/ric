@@ -23,6 +23,7 @@ import {
   deleteDatabase,
   replaceDatabaseFromRecords,
 } from './db.js';
+import { avatar, displayName, profileUrl } from './person.js';
 import { exportDatabaseFile, readDatabaseBackup } from './sqlite.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
@@ -481,9 +482,18 @@ async function getRelativesInCommon() {
 function openComparison(relativeId) {
   if (!state.selectedId || !relativeId) return;
 
+  const profile = state.profiles.find((item) => item.id === state.selectedId);
+  const relative = state.relatives.find((item) => item.relative_profile_id === relativeId);
+  const profileName = profile
+    ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id
+    : state.selectedId;
+  const relativeName = relative ? displayName(relative) : relativeId;
+
   const url = chrome.runtime.getURL('compare.html')
     + '?profile=' + encodeURIComponent(state.selectedId)
-    + '&relative=' + encodeURIComponent(relativeId);
+    + '&relative=' + encodeURIComponent(relativeId)
+    + '&profile_name=' + encodeURIComponent(profileName)
+    + '&relative_name=' + encodeURIComponent(relativeName);
 
   if (chrome.tabs && chrome.tabs.create) chrome.tabs.create({ url });
   else window.open(url, '_blank', 'noopener');
@@ -661,60 +671,6 @@ async function importData(file) {
 // about 74.4 cM per percentage point.
 const CM_PER_PERCENT = 74.4;
 
-function relativeName(relative) {
-  const name = [
-    relative.first_name || relative.first_initial,
-    relative.last_name || relative.last_initial,
-  ].filter(Boolean).join(' ');
-
-  return name || relative.initials || '—';
-}
-
-function relativeInitials(relative) {
-  if (relative.initials) return String(relative.initials).trim().slice(0, 3).toUpperCase();
-
-  const first = relative.first_initial || String(relative.first_name || '').trim().charAt(0);
-  const last = relative.last_initial || String(relative.last_name || '').trim().charAt(0);
-  return (first + last).toUpperCase() || '?';
-}
-
-function relativePhotoUrl(relative) {
-  const url = relative.profile_image_url;
-  return typeof url === 'string' && url ? url : null;
-}
-
-function relativeSex(relative) {
-  const sex = String(relative.sex || '').trim().toLowerCase();
-  if (sex === 'female' || sex === 'f') return 'female';
-  if (sex === 'male' || sex === 'm') return 'male';
-  return '';
-}
-
-function relativeAvatar(relative) {
-  const photo = relativePhotoUrl(relative);
-  const sex = relativeSex(relative);
-
-  return m('span', { class: sex ? 'avatar ' + sex : 'avatar', 'aria-hidden': 'true' }, [
-    photo
-      ? m('img', {
-          src: photo,
-          alt: '',
-          loading: 'lazy',
-          decoding: 'async',
-          referrerpolicy: 'no-referrer',
-          onerror: (event) => { event.target.style.display = 'none'; },
-        })
-      : m('span.avatar-initials', relativeInitials(relative)),
-  ]);
-}
-
-function relativeProfileUrl(relativeId) {
-  if (!state.selectedId || !relativeId) return null;
-
-  return 'https://you.23andme.com/p/' + encodeURIComponent(state.selectedId)
-    + '/profile/' + encodeURIComponent(relativeId) + '/';
-}
-
 function numericValue(value) {
   if (value === undefined || value === null || value === '') return null;
 
@@ -861,16 +817,16 @@ const App = {
                   ]))
                 : state.relatives.length
                   ? state.relatives.map((relative, index) => {
-                      const profileUrl = relativeProfileUrl(relative.relative_profile_id);
+                      const personUrl = profileUrl(state.selectedId, relative.relative_profile_id);
                       const person = [
-                        relativeAvatar(relative),
-                        m('span.relative-name', relativeName(relative)),
+                        avatar(relative),
+                        m('span.relative-name', displayName(relative)),
                       ];
 
                       return m('tr', { key: relative.relative_profile_id || index }, [
-                        m('td', profileUrl
+                        m('td', personUrl
                           ? m('a.relative.relative-link', {
-                              href: profileUrl,
+                              href: personUrl,
                               target: '_blank',
                               rel: 'noopener noreferrer',
                               title: 'Open this relative on 23andMe',

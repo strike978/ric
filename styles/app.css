@@ -279,10 +279,6 @@ select:disabled { opacity: 0.6; }
 }
 
 .relatives-table tbody tr:last-child td { border-bottom: none; }
-.relatives-table td.id { font-family: var(--mono); color: #cfd6e4; }
-.relatives-table td.id a { color: #a8bcf5; text-decoration: none; }
-.relatives-table td.id a:hover { color: #c9d6ff; text-decoration: underline; }
-.relatives-table td.id a:focus-visible { outline: 2px solid #8fb0ff; outline-offset: 2px; }
 .relatives-table td.dna { font-family: var(--mono); color: #cfd6e4; white-space: nowrap; }
 .relatives-table td.empty { color: var(--muted); text-align: center; padding: 18px; }
 
