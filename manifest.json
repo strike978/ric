@@ -1,8 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Relatives in Common",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Proof of concept for viewing a 23andMe profile's relatives in common.",
+  "permissions": [
+    "notifications"
+  ],
   "host_permissions": [
     "https://*.23andme.com/*"
   ],

@@ -8,7 +8,7 @@
  * 3. Fetch relatives-in-common for every loaded relative, one at a time, with a
  *    one second gap. Only the active row shows a spinner; then it gets an Open
  *    button. If a fetch fails, the same relative is retried every minute
- *    instead of moving on to the next one.
+ *    instead of moving on to the next one, and a Chrome notification appears.
  * 4. Save all of each pair's relatives in common to IndexedDB so compare.html
  *    can render them.
  */
@@ -251,6 +251,48 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/* ---------- Failure notifications ---------- */
+
+const RETRY_NOTIFICATION_PREFIX = 'ric-retry-';
+const retryNotifications = new Set();
+
+// Shows (or updates) one notification per failing relative, so a relative that
+// keeps failing after each retry doesn't stack up notifications.
+function notifyRetry(relativeId, relative, err) {
+  if (!chrome.notifications || !chrome.notifications.create) return;
+
+  const notificationId = RETRY_NOTIFICATION_PREFIX + relativeId;
+  retryNotifications.add(notificationId);
+
+  chrome.notifications.create(notificationId, {
+    type: 'basic',
+    iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+    title: 'Relatives in Common',
+    message: 'Could not get relatives in common for '
+      + (relative.initials || relativeId) + ' ('
+      + (err && err.message ? err.message : String(err))
+      + '). Retrying in 1 minute.',
+    priority: 2,
+    requireInteraction: true,
+  }, () => void chrome.runtime.lastError);
+}
+
+function clearRetryNotification(relativeId) {
+  if (!chrome.notifications || !chrome.notifications.clear) return;
+  clearNotificationById(RETRY_NOTIFICATION_PREFIX + relativeId);
+}
+
+function clearAllRetryNotifications() {
+  for (const notificationId of [...retryNotifications]) {
+    clearNotificationById(notificationId);
+  }
+}
+
+function clearNotificationById(notificationId) {
+  retryNotifications.delete(notificationId);
+  chrome.notifications.clear(notificationId, () => void chrome.runtime.lastError);
+}
+
 function formatRemaining(ms) {
   const seconds = Math.max(0, Math.ceil(ms / 1000));
   if (seconds < 60) return seconds + 's';
@@ -282,6 +324,7 @@ function cancelComparisons() {
   comparisonsSeq++;
   state.comparisonsRunning = false;
   state.comparisonProgress = null;
+  clearAllRetryNotifications();
 
   if (comparisonXhr) {
     comparisonXhr.abort();
@@ -377,6 +420,7 @@ async function getRelativesInCommon() {
 
         await saveRelativesInCommon(profileId, relativeId, relativesInCommon);
         if (seq !== comparisonsSeq) return;
+        clearRetryNotification(relativeId);
         break;
       } catch (err) {
         if (seq !== comparisonsSeq) return;
@@ -386,6 +430,7 @@ async function getRelativesInCommon() {
           + (relative.initials || relativeId) + ' ('
           + (err && err.message ? err.message : String(err))
           + '). Retrying in 1 minute…';
+        notifyRetry(relativeId, relative, err);
         m.redraw.sync();
 
         await sleep(RETRY_DELAY_MS);

@@ -24,7 +24,8 @@ one's relatives-in-common list.
    relatives. A spinner shows on the row being fetched; it becomes **Open** when
    ready. A progress bar shows how many are done and roughly how long is left.
    If a fetch fails, that same relative is retried every minute instead of
-   being skipped. Click **Stop** to cancel the run.
+   being skipped, and a Chrome notification reports the failure (clicking it
+   opens this page). Click **Stop** to cancel the run.
 5. Click **Open** to see the relatives in common for that pair.
 6. Click **Delete database** at the bottom of the panel to delete the whole
    local database (all saved relatives and relatives-in-common data) from this
