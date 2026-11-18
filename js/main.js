@@ -7,7 +7,7 @@
  *    a spinner shows while they load.
  * 3. Fetch relatives-in-common for every loaded relative, one at a time, with a
  *    one second gap. Only the active row shows a spinner; then it gets an Open
- *    button. If a fetch fails, the same relative is retried every 10 seconds
+ *    button. If a fetch fails, the same relative is retried every minute
  *    instead of moving on to the next one.
  * 4. Save all of each pair's relatives in common to IndexedDB so compare.html
  *    can render them.
@@ -20,7 +20,7 @@ import { saveRelatives, saveRelativesInCommon, getProfileRelativesInCommon, dele
 const TARGET_URL = 'https://you.23andme.com/';
 
 const COMPARISON_GAP_MS = 1000;
-const RETRY_DELAY_MS = 10000;
+const RETRY_DELAY_MS = 60000;
 
 let relativesXhr = null;
 let comparisonXhr = null;
@@ -306,7 +306,7 @@ function stopComparisons() {
 
 // Fetches comparisons that are not already saved for every loaded relative,
 // sequentially, 1s apart. A failed fetch does not skip ahead: the same
-// relative is retried after 10s until it succeeds or the run is stopped. The
+// relative is retried after 1 minute until it succeeds or the run is stopped. The
 // row being fetched shows a spinner; finished rows get an Open button.
 async function getRelativesInCommon() {
   if (!state.selectedId || state.relatives.length === 0 || state.comparisonsRunning) return;
@@ -385,7 +385,7 @@ async function getRelativesInCommon() {
         state.notice = 'Could not get relatives in common for '
           + (relative.initials || relativeId) + ' ('
           + (err && err.message ? err.message : String(err))
-          + '). Retrying in 10 seconds…';
+          + '). Retrying in 1 minute…';
         m.redraw.sync();
 
         await sleep(RETRY_DELAY_MS);
@@ -460,7 +460,7 @@ function actionFor(relative) {
   const status = state.comparisons[relativeId];
 
   if (status === 'loading') return m('span.spinner', { title: 'Loading' });
-  if (status === 'retrying') return m('span.action-retry', { title: 'Failed; retrying in 10 seconds' }, 'Retrying…');
+  if (status === 'retrying') return m('span.action-retry', { title: 'Failed; retrying in 1 minute' }, 'Retrying…');
   if (status === 'ready') {
     return m('button.link-button', {
       type: 'button',
