@@ -15,11 +15,17 @@
 
 import { mainState as state } from './state.js';
 import { extractProfiles } from './profiles.js';
-import { saveRelatives, saveRelativesInCommon, getProfileRelativesInCommon, deleteDatabase } from './db.js';
+import {
+  saveRelatives,
+  saveRelativesInCommon,
+  getProfileRelativesInCommon,
+  deleteDatabase,
+  replaceDatabaseFromRecords,
+} from './db.js';
+import { exportDatabaseFile, readDatabaseBackup } from './sqlite.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
 
-const COMPARISON_GAP_MS = 1000;
 const RETRY_DELAY_MS = 60000;
 
 let relativesXhr = null;
@@ -369,7 +375,7 @@ async function getRelativesInCommon() {
   state.comparisonProgress = {
     total,
     done: 0,
-    remainingMs: total * COMPARISON_GAP_MS,
+    remainingMs: total * state.comparisonGapMs,
   };
   m.redraw.sync();
 
@@ -379,7 +385,7 @@ async function getRelativesInCommon() {
     const relative = targets[index];
     const relativeId = relative.relative_profile_id;
     const elapsed = Date.now() - startedAt;
-    const average = index > 0 ? elapsed / index : COMPARISON_GAP_MS;
+    const average = index > 0 ? elapsed / index : state.comparisonGapMs;
 
     state.comparisonProgress = {
       total,
@@ -447,7 +453,7 @@ async function getRelativesInCommon() {
     m.redraw.sync();
 
     if (index < total - 1) {
-      await sleep(COMPARISON_GAP_MS);
+      await sleep(state.comparisonGapMs);
       if (seq !== comparisonsSeq) return;
     }
   }
@@ -471,7 +477,7 @@ function openComparison(relativeId) {
 
 // Deletes the whole local database after confirmation.
 async function deleteData() {
-  if (state.clearing || state.relativesPhase === 'loading' || state.comparisonsRunning) return;
+  if (state.clearing || state.transferring || state.relativesPhase === 'loading' || state.comparisonsRunning) return;
 
   const confirmed = window.confirm(
     'Delete the entire local database and all saved relatives and relatives-in-common data from this browser?'
@@ -488,12 +494,149 @@ async function deleteData() {
     state.relatives = [];
     state.relativesPhase = 'idle';
     state.comparisons = {};
-    state.comparisonsRunning = false;
     state.notice = 'Local database deleted.';
   } catch (err) {
     state.notice = 'Could not delete the local database: ' + (err.message || err);
   } finally {
     state.clearing = false;
+    m.redraw.sync();
+  }
+}
+
+/* ---------- Export / import ---------- */
+
+function exportFilename() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, '0');
+  return 'relatives-in-common-'
+    + now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+    + '.db';
+}
+
+// Saves the SQLite file, using a save dialog when the browser offers one and
+// falling back to a regular download.
+async function saveExport(bytes) {
+  let handle = null;
+
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: exportFilename(),
+        types: [{
+          description: 'SQLite database',
+          accept: { 'application/vnd.sqlite3': ['.db', '.sqlite'] },
+        }],
+      });
+    } catch (err) {
+      if (err && err.name === 'AbortError') return false;
+
+      // The save dialog is not always usable from an extension page; fall back
+      // to a regular download instead of failing the export.
+      if (!err || (err.name !== 'NotAllowedError' && err.name !== 'SecurityError')) {
+        throw err;
+      }
+    }
+  }
+
+  if (handle) {
+    const writable = await handle.createWritable();
+    try {
+      await writable.write(bytes);
+      await writable.close();
+    } catch (err) {
+      try { await writable.abort(); } catch { /* ignore */ }
+      throw err;
+    }
+    return true;
+  }
+
+  const blob = new Blob([bytes], { type: 'application/vnd.sqlite3' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = exportFilename();
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
+}
+
+// Writes the whole database to a SQLite file the user can keep, query, or move
+// to another browser.
+async function exportData() {
+  if (state.transferring) return;
+
+  state.transferring = 'export';
+  state.notice = '';
+  m.redraw.sync();
+
+  const counts = { profiles: 0, comparisons: 0 };
+
+  try {
+    const bytes = await exportDatabaseFile(counts);
+    const saved = await saveExport(bytes);
+    if (saved) {
+      state.notice = 'Exported ' + counts.profiles + ' profile(s) and '
+        + counts.comparisons + ' comparison(s).';
+    }
+  } catch (err) {
+    state.notice = 'Could not export the database: ' + (err.message || err);
+  } finally {
+    state.transferring = '';
+    m.redraw.sync();
+  }
+}
+
+function chooseImportFile() {
+  if (state.transferring || state.clearing || state.comparisonsRunning) return;
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.db,.sqlite,.sqlite3,application/vnd.sqlite3,application/x-sqlite3';
+  input.onchange = () => {
+    const file = input.files && input.files[0];
+    if (file) importData(file);
+  };
+  input.click();
+}
+
+// Reads a previously exported SQLite file back into the database, replacing
+// everything that is currently saved.
+async function importData(file) {
+  const confirmed = window.confirm(
+    'Import "' + file.name + '"?\n\n'
+    + 'This replaces the whole local database: all saved relatives and relatives-in-common data '
+    + 'will be deleted and replaced by the file\'s contents.'
+  );
+  if (!confirmed) return;
+
+  state.transferring = 'import';
+  state.notice = '';
+  m.redraw.sync();
+
+  let backup = null;
+
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    backup = await readDatabaseBackup(bytes);
+
+    await replaceDatabaseFromRecords(backup.records());
+
+    // Reload the selected profile's saved markers so imported comparisons show
+    // up as Open right away.
+    if (state.selectedId) {
+      await restoreSavedComparisons(state.selectedId, relativesSeq);
+    }
+
+    state.notice = 'Imported ' + backup.profiles + ' profile(s) and '
+      + backup.comparisons + ' comparison(s).';
+  } catch (err) {
+    state.notice = 'Could not import the file: ' + (err.message || err);
+  } finally {
+    if (backup) backup.close();
+    state.transferring = '';
     m.redraw.sync();
   }
 }
@@ -512,7 +655,6 @@ function actionFor(relative) {
       onclick: () => openComparison(relativeId),
     }, 'Open');
   }
-  if (status === 'error') return m('span.action-error', 'Failed');
   return null;
 }
 
@@ -565,17 +707,35 @@ const App = {
             }, [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id)),
           ]),
 
-          m('div#idBox', { class: state.selectedId ? 'id-box' : 'id-box hidden' }, [
+          m('div', { class: state.selectedId ? 'id-box' : 'id-box hidden' }, [
             m('span.id-label', 'ID'),
-            m('code#profileId.id-value', state.selectedId),
+            m('code.id-value', state.selectedId),
           ]),
 
           m('div.button-row', [
-            m('button#getRelatives.secondary', {
+            m('button.secondary', {
               type: 'button',
               disabled: state.relatives.length === 0,
               onclick: state.comparisonsRunning ? stopComparisons : getRelativesInCommon,
             }, state.comparisonsRunning ? 'Stop' : 'Get relatives in common'),
+            m('label.label', { for: 'requestDelay' }, 'Delay (seconds)'),
+            m('input#requestDelay', {
+              type: 'number',
+              min: '0',
+              step: 'any',
+              value: String(state.comparisonGapMs / 1000),
+              title: 'Delay between relatives-in-common requests, in seconds',
+              onchange: (event) => {
+                const raw = event.target.value.trim();
+                const seconds = Number(raw);
+
+                if (raw !== '' && Number.isFinite(seconds) && seconds >= 0) {
+                  state.comparisonGapMs = Math.round(seconds * 1000);
+                }
+
+                event.target.value = String(state.comparisonGapMs / 1000);
+              },
+            }),
           ]),
 
           m('div.progress', { class: progress ? 'progress' : 'progress hidden' }, [
@@ -588,7 +748,7 @@ const App = {
             m('p.progress-label', { 'aria-live': 'polite' }, progressText),
           ]),
 
-          m('div#relativesOutput', {
+          m('div', {
             class: state.relativesPhase === 'loading'
               || state.relativesPhase === 'error'
               || state.relatives.length
@@ -601,7 +761,7 @@ const App = {
                 m('th', 'Relative profile ID'),
                 m('th.actions-col', 'Relatives in common'),
               ])),
-              m('tbody#relativesBody', state.relativesPhase === 'loading'
+              m('tbody', state.relativesPhase === 'loading'
                 ? m('tr', m('td.empty', { colspan: 4 }, [
                     m('span.spinner'),
                     ' Loading relatives…',
@@ -619,16 +779,33 @@ const App = {
           ]),
 
           m('div.panel-footer', [
-            m('span.footnote', 'Saved data stays in this browser.'),
-            m('button#deleteDatabase.link-button.danger', {
-              type: 'button',
-              disabled: state.clearing || state.relativesPhase === 'loading' || state.comparisonsRunning,
-              onclick: deleteData,
-            }, state.clearing ? 'Deleting…' : 'Delete database'),
+            m('span.footnote', 'Saved data stays in this browser. Export it to back it up or move it.'),
+            m('div.footer-actions', [
+              m('button.link-button', {
+                type: 'button',
+                title: 'Download the saved database as a SQLite .db file',
+                disabled: state.transferring || state.clearing
+                  || state.relativesPhase === 'loading' || state.comparisonsRunning,
+                onclick: exportData,
+              }, state.transferring === 'export' ? 'Exporting…' : 'Export'),
+              m('button.link-button', {
+                type: 'button',
+                title: 'Load a previously exported SQLite .db file',
+                disabled: state.transferring || state.clearing
+                  || state.relativesPhase === 'loading' || state.comparisonsRunning,
+                onclick: chooseImportFile,
+              }, state.transferring === 'import' ? 'Importing…' : 'Import'),
+              m('button.link-button.danger', {
+                type: 'button',
+                disabled: state.clearing || state.transferring
+                  || state.relativesPhase === 'loading' || state.comparisonsRunning,
+                onclick: deleteData,
+              }, state.clearing ? 'Deleting…' : 'Delete database'),
+            ]),
           ]),
         ]),
 
-        m('p#notice', { class: state.notice ? 'notice' : 'notice hidden' }, [
+        m('p', { class: state.notice ? 'notice' : 'notice hidden' }, [
           state.notice,
           state.noticeLink
             ? m('a.notice-link', {

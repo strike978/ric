@@ -12,10 +12,12 @@ export const mainState = {
   selectedId: '',
   relatives: [],
   relativesPhase: 'idle',    // idle | loading | ready | error
-  comparisons: {},           // relative id -> loading | retrying | ready | error
+  comparisons: {},           // relative id -> loading | retrying | ready
   comparisonsRunning: false,
+  comparisonGapMs: 1000,     // delay between relatives-in-common requests
   comparisonProgress: null,  // { total, done, remainingMs } while fetching
   clearing: false,
+  transferring: '',           // '' | export | import while a backup is read/written
   notice: '',
   noticeLink: '',          // optional URL shown as a link next to the notice
 };
@@ -25,6 +27,7 @@ export const compareState = {
   subtitle: '',
   meta: '',
   relatives: [],
+  sort: 'saved',            // saved | ibd:N:asc | ibd:N:desc
   loading: false,
   notice: '',
 };

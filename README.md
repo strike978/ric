@@ -21,23 +21,29 @@ one's relatives-in-common list.
 3. Pick a profile from the menu. That profile's DNA relatives load right away,
    with a spinner in the table.
 4. Click **Get relatives in common** to fetch comparisons for the loaded
-   relatives. A spinner shows on the row being fetched; it becomes **Open** when
-   ready. A progress bar shows how many are done and roughly how long is left.
-   If a fetch fails, that same relative is retried every minute instead of
-   being skipped, and a Chrome notification reports the failure (clicking it
-   opens this page). Click **Stop** to cancel the run.
+   relatives. The **Delay (seconds)** field beside it sets the gap between
+   requests; any non-negative value works. A spinner shows on the row being
+   fetched; it becomes **Open** when ready. A progress bar shows how many are
+   done and roughly how long is left. If a fetch fails, that same relative is
+   retried every minute instead of being skipped, and a Chrome notification
+   reports the failure (clicking it opens this page). Click **Stop** to cancel
+   the run.
 5. Click **Open** to see the relatives in common for that pair.
-6. Click **Delete database** at the bottom of the panel to delete the whole
+6. Click **Export** at the bottom of the panel to save everything in the local
+   database to a `.db` SQLite file.
+7. Click **Import** to load a `.db` file made by **Export**. This replaces the
+   whole local database with the file's contents.
+8. Click **Delete database** at the bottom of the panel to delete the whole
    local database (all saved relatives and relatives-in-common data) from this
    browser.
 
 The comparison page shows, for each relative in common:
 
-- initials and name
-- profile id
+- name, or initials when no name is shown
+- profile id, linked to the profile on 23andMe
 - whether they share openly
-- both predicted relationships
-- both IBD proportions
+- every predicted relationship and IBD proportion returned (usually two)
+- sortable by saved order or any available IBD proportion
 
 ## Notes
 
@@ -54,6 +60,18 @@ The comparison page shows, for each relative in common:
   array.
 - The comparison page reads its data from IndexedDB; nothing is stored in
   `localStorage`.
+- **Export** writes a real SQLite database (`.db`) using
+  [sql.js](https://github.com/sql-js/sql.js). The tables are `metadata`,
+  `profiles`, `relatives`, `pairs`, and `relatives_in_common`. Every saved field
+  becomes its own column, with the field names discovered from the data; common
+  fields such as names, IBD proportions, and relationship ids are therefore easy
+  to query. Booleans are stored as `0` or `1`, and `row_position` keeps each list
+  in its original order. **Import** validates the whole file before replacing
+  both stores with its contents. It reads only databases made by **Export**, not
+  arbitrary SQLite files.
+- The database is built in memory while exporting, so a backup briefly needs
+  memory for the whole file.
+- SQLite support uses sql.js (MIT), vendored under `vendor/`.
 - The comparison is fetched once and then opened instantly.
 - If you see a sign-in page or a Cloudflare check, open
   <https://you.23andme.com/> in a normal tab, sign in / clear the check, then reload

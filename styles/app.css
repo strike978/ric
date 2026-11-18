@@ -66,6 +66,26 @@ h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
   color: var(--muted);
 }
 
+/* Comparison controls: result count and sort picker */
+.list-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-row select {
+  width: auto;
+  max-width: 320px;
+}
+
 /* Page layout: centered column holding one or more panels */
 main {
   max-width: 860px;
@@ -132,37 +152,27 @@ select:disabled { opacity: 0.6; }
   overflow-wrap: anywhere;
 }
 
-/* Buttons: solid primary, outlined secondary, small row action */
-.primary {
-  justify-self: start;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  padding: 10px 18px;
-  border-radius: 8px;
-  border: 0;
-  background: #4f6bdc;
-  color: #f6f8ff;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-.primary:hover { background: #5d79e8; }
-.primary:active { background: #445fc7; }
-.primary:disabled {
-  background: #242c3b;
-  color: #7c879b;
-  cursor: default;
-}
-.primary:focus-visible { outline: 2px solid #8fb0ff; outline-offset: 2px; }
-
+/* Buttons: outlined secondary and small row action */
 .button-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.button-row input[type='number'] {
+  width: 88px;
+  padding: 9px 10px;
+  background: #0b0e14;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 14px;
+  outline: none;
+}
+.button-row input[type='number']:focus {
+  border-color: #3f4f74;
+  box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.14);
 }
 
 .secondary {
@@ -183,7 +193,7 @@ select:disabled { opacity: 0.6; }
 .secondary:disabled { opacity: 0.45; cursor: default; }
 .secondary:focus-visible { outline: 2px solid #8fb0ff; outline-offset: 2px; }
 
-/* Feedback: per-row loading spinner and inline error text */
+/* Feedback: per-row loading spinner and retry text */
 .spinner {
   display: inline-block;
   width: 14px;
@@ -199,7 +209,6 @@ select:disabled { opacity: 0.6; }
   to { transform: rotate(360deg); }
 }
 
-.action-error { color: #ff8d9c; font-size: 12px; }
 .action-retry { color: #f6d9a2; font-size: 12px; }
 
 /* Fetch progress: bar plus count and estimated time remaining */
@@ -264,6 +273,9 @@ select:disabled { opacity: 0.6; }
 
 .relatives-table tbody tr:last-child td { border-bottom: none; }
 .relatives-table td.id { font-family: var(--mono); color: #cfd6e4; }
+.relatives-table td.id a { color: #a8bcf5; text-decoration: none; }
+.relatives-table td.id a:hover { color: #c9d6ff; text-decoration: underline; }
+.relatives-table td.id a:focus-visible { outline: 2px solid #8fb0ff; outline-offset: 2px; }
 .relatives-table td.empty { color: var(--muted); text-align: center; padding: 18px; }
 
 .actions-col { width: 1%; }
@@ -306,6 +318,13 @@ select:disabled { opacity: 0.6; }
 }
 
 .footnote { font-size: 12px; color: var(--muted); }
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
 /* Messages: amber notice for sign-in / blocked / parse problems */
 .notice {

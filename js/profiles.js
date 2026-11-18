@@ -3,7 +3,7 @@
  *
  * you.23andme.com embeds the signed-in profiles in its HTML as a
  * `new exports.quickInviteModal({ ... })` call. These helpers pull that object's
- * `profiles` array and `currentProfileID` out without eval.
+ * `profiles` array out without eval.
  */
 
 function skipString(src, start) {
@@ -68,10 +68,6 @@ export function extractProfiles(html) {
   const profiles = parseProfiles(html.slice(open, close + 1));
   if (!profiles) return { error: 'the profiles array could not be parsed' };
 
-  const idMatch = /['"]currentProfileID['"]\s*:\s*"([^"]*)"/g;
-  idMatch.lastIndex = anchor;
-  const current = idMatch.exec(html);
-
   return {
     data: {
       profiles: profiles.map((profile) => ({
@@ -79,7 +75,6 @@ export function extractProfiles(html) {
         first_name: profile.first_name,
         last_name: profile.last_name,
       })),
-      currentProfileID: current ? current[1] : null,
     },
   };
 }

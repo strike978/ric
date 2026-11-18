@@ -101,3 +101,89 @@ export async function deleteDatabase() {
   await db.delete();
   db = createDb();
 }
+
+/* ---------- Export / import ---------- */
+
+export const EXPORT_FORMAT = 'relatives-in-common-database';
+
+function isObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+// Yields the whole database as records, one at a time. The first record holds
+// the export metadata.
+export async function* exportDatabaseRecords() {
+  yield {
+    format: EXPORT_FORMAT,
+    exported_at: new Date().toISOString(),
+  };
+
+  const relativeKeys = await db.profile_relatives.toCollection().primaryKeys();
+  for (const profileId of relativeKeys) {
+    const record = await db.profile_relatives.get(profileId);
+    if (!record || !Array.isArray(record.relatives)) continue;
+
+    yield {
+      type: 'profile_relatives',
+      profile_id: String(record.profile_id),
+      relatives: record.relatives,
+    };
+  }
+
+  // One record per pair keeps each array small; the import groups pairs back
+  // into one record per profile.
+  const commonKeys = await db.relatives_in_common.toCollection().primaryKeys();
+  for (const profileId of commonKeys) {
+    const record = await db.relatives_in_common.get(profileId);
+    if (!record || !Array.isArray(record.pairs)) continue;
+
+    for (const pair of record.pairs) {
+      if (!isObject(pair) || !pair.relative_profile_id || !Array.isArray(pair.relatives)) continue;
+
+      yield {
+        type: 'pair',
+        profile_id: String(record.profile_id),
+        relative_profile_id: String(pair.relative_profile_id),
+        relatives: pair.relatives,
+      };
+    }
+  }
+}
+
+// Replaces both stores with records from a validated export. The export lists
+// all pairs for a profile together, so only one kept profile's pairs are held
+// in memory at a time.
+export async function replaceDatabaseFromRecords(records) {
+  await db.profile_relatives.clear();
+  await db.relatives_in_common.clear();
+
+  let currentProfileId = null;
+  let pairs = [];
+
+  for await (const record of records) {
+    if (record.type === 'profile_relatives') {
+      await db.profile_relatives.put({
+        profile_id: record.profile_id,
+        relatives: record.relatives,
+      });
+      continue;
+    }
+
+    if (record.profile_id !== currentProfileId) {
+      if (currentProfileId !== null) {
+        await db.relatives_in_common.put({ profile_id: currentProfileId, pairs });
+      }
+      currentProfileId = record.profile_id;
+      pairs = [];
+    }
+
+    pairs.push({
+      relative_profile_id: record.relative_profile_id,
+      relatives: record.relatives,
+    });
+  }
+
+  if (currentProfileId !== null) {
+    await db.relatives_in_common.put({ profile_id: currentProfileId, pairs });
+  }
+}
