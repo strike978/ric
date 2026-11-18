@@ -21,13 +21,14 @@ one's relatives-in-common list.
 3. Pick a profile from the menu. That profile's DNA relatives load right away,
    with a spinner in the table.
 4. Click **Get relatives in common** to fetch comparisons for the loaded
-   relatives. The **Delay (seconds)** field beside it sets the gap between
-   requests; any non-negative value works. A spinner shows on the row being
-   fetched; it becomes **Open** when ready. A progress bar shows how many are
-   done and roughly how long is left. If a fetch fails, that same relative is
-   retried every minute instead of being skipped, and a Chrome notification
-   reports the failure (clicking it opens this page). Click **Stop** to cancel
-   the run.
+   relatives. The **Delay (seconds)** and **Retry delay (seconds)** fields set
+   the gap between requests (default 1.5 seconds) and the wait after a failure
+   (default 60 seconds); any non-negative value works. A spinner shows on the
+   row being fetched; it becomes **Open** when ready. A progress bar shows how
+   many are done and roughly how long is left. If a fetch fails, that same
+   relative is retried after the retry delay instead of being skipped, and a
+   Chrome notification reports the failure (clicking it opens this page). Click
+   **Stop** to cancel the run.
 5. Click **Open** to see the relatives in common for that pair.
 6. Click **Export** at the bottom of the panel to save everything in the local
    database to a `.db` SQLite file.

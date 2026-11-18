@@ -6,9 +6,10 @@
  * 2. Load the selected profile's DNA relatives as soon as a profile is picked;
  *    a spinner shows while they load.
  * 3. Fetch relatives-in-common for every loaded relative, one at a time, with a
- *    one second gap. Only the active row shows a spinner; then it gets an Open
- *    button. If a fetch fails, the same relative is retried every minute
- *    instead of moving on to the next one, and a Chrome notification appears.
+ *    configurable gap (1.5 seconds by default). Only the active row shows a
+ *    spinner; then it gets an Open button. If a fetch fails, the same relative
+ *    is retried after the configured retry delay (1 minute by default) instead
+ *    of moving on to the next one, and a Chrome notification appears.
  * 4. Save all of each pair's relatives in common to IndexedDB so compare.html
  *    can render them.
  */
@@ -25,8 +26,6 @@ import {
 import { exportDatabaseFile, readDatabaseBackup } from './sqlite.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
-
-const RETRY_DELAY_MS = 60000;
 
 let relativesXhr = null;
 let comparisonXhr = null;
@@ -277,7 +276,7 @@ function notifyRetry(relativeId, relative, err) {
     message: 'Could not get relatives in common for '
       + (relative.initials || relativeId) + ' ('
       + (err && err.message ? err.message : String(err))
-      + '). Retrying in 1 minute.',
+      + '). Retrying in ' + formatRemaining(state.retryDelayMs) + '.',
     priority: 2,
     requireInteraction: true,
   }, () => void chrome.runtime.lastError);
@@ -306,6 +305,20 @@ function formatRemaining(ms) {
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
   return minutes + 'm' + (rest ? ' ' + rest + 's' : '');
+}
+
+// Reads a seconds field into the matching millisecond state setting.
+function delayChangeHandler(key) {
+  return (event) => {
+    const raw = event.target.value.trim();
+    const seconds = Number(raw);
+
+    if (raw !== '' && Number.isFinite(seconds) && seconds >= 0) {
+      state[key] = Math.round(seconds * 1000);
+    }
+
+    event.target.value = String(state[key] / 1000);
+  };
 }
 
 // Marks rows whose relatives-in-common data is already saved for this profile.
@@ -354,9 +367,10 @@ function stopComparisons() {
 }
 
 // Fetches comparisons that are not already saved for every loaded relative,
-// sequentially, 1s apart. A failed fetch does not skip ahead: the same
-// relative is retried after 1 minute until it succeeds or the run is stopped. The
-// row being fetched shows a spinner; finished rows get an Open button.
+// sequentially, with the configured gap. A failed fetch does not skip ahead:
+// the same relative is retried after the configured retry delay until it
+// succeeds or the run is stopped. The row being fetched shows a spinner;
+// finished rows get an Open button.
 async function getRelativesInCommon() {
   if (!state.selectedId || state.relatives.length === 0 || state.comparisonsRunning) return;
 
@@ -435,11 +449,11 @@ async function getRelativesInCommon() {
         state.notice = 'Could not get relatives in common for '
           + (relative.initials || relativeId) + ' ('
           + (err && err.message ? err.message : String(err))
-          + '). Retrying in 1 minute…';
+          + '). Retrying in ' + formatRemaining(state.retryDelayMs) + '…';
         notifyRetry(relativeId, relative, err);
         m.redraw.sync();
 
-        await sleep(RETRY_DELAY_MS);
+        await sleep(state.retryDelayMs);
         if (seq !== comparisonsSeq) return;
       }
     }
@@ -648,7 +662,7 @@ function actionFor(relative) {
   const status = state.comparisons[relativeId];
 
   if (status === 'loading') return m('span.spinner', { title: 'Loading' });
-  if (status === 'retrying') return m('span.action-retry', { title: 'Failed; retrying in 1 minute' }, 'Retrying…');
+  if (status === 'retrying') return m('span.action-retry', { title: 'Failed; retrying in ' + formatRemaining(state.retryDelayMs) }, 'Retrying…');
   if (status === 'ready') {
     return m('button.link-button', {
       type: 'button',
@@ -718,24 +732,28 @@ const App = {
               disabled: state.relatives.length === 0,
               onclick: state.comparisonsRunning ? stopComparisons : getRelativesInCommon,
             }, state.comparisonsRunning ? 'Stop' : 'Get relatives in common'),
-            m('label.label', { for: 'requestDelay' }, 'Delay (seconds)'),
-            m('input#requestDelay', {
-              type: 'number',
-              min: '0',
-              step: 'any',
-              value: String(state.comparisonGapMs / 1000),
-              title: 'Delay between relatives-in-common requests, in seconds',
-              onchange: (event) => {
-                const raw = event.target.value.trim();
-                const seconds = Number(raw);
-
-                if (raw !== '' && Number.isFinite(seconds) && seconds >= 0) {
-                  state.comparisonGapMs = Math.round(seconds * 1000);
-                }
-
-                event.target.value = String(state.comparisonGapMs / 1000);
-              },
-            }),
+            m('div.delay-field', [
+              m('label.label', { for: 'requestDelay' }, 'Delay (seconds)'),
+              m('input#requestDelay', {
+                type: 'number',
+                min: '0',
+                step: 'any',
+                value: String(state.comparisonGapMs / 1000),
+                title: 'Delay between relatives-in-common requests, in seconds',
+                onchange: delayChangeHandler('comparisonGapMs'),
+              }),
+            ]),
+            m('div.delay-field', [
+              m('label.label', { for: 'retryDelay' }, 'Retry delay (seconds)'),
+              m('input#retryDelay', {
+                type: 'number',
+                min: '0',
+                step: 'any',
+                value: String(state.retryDelayMs / 1000),
+                title: 'Delay before retrying a failed request, in seconds',
+                onchange: delayChangeHandler('retryDelayMs'),
+              }),
+            ]),
           ]),
 
           m('div.progress', { class: progress ? 'progress' : 'progress hidden' }, [
