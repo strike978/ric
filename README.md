@@ -40,7 +40,8 @@ one's relatives-in-common list.
    local database (all saved relatives and relatives-in-common data) from this
    browser.
 
-The comparison page shows, for each relative in common:
+The comparison page title and subtitle show the names of the two people in the
+pair. For each relative in common it shows:
 
 - avatar and name (or initials when there is no photo), linked to the profile
   on 23andMe

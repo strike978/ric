@@ -6,7 +6,7 @@
  */
 
 import { compareState as state } from './state.js';
-import { getRelativesInCommon } from './db.js';
+import { getRelativesInCommon, getSavedRelatives } from './db.js';
 import { avatar, displayName, profileUrl } from './person.js';
 
 const params = new URLSearchParams(location.search);
@@ -136,7 +136,12 @@ function sortedRelatives(relatives, sort) {
 /* ---------- Load from IndexedDB ---------- */
 
 async function load() {
-  state.subtitle = profileName && relativeName ? profileName + ' → ' + relativeName : '';
+  if (profileName && relativeName) {
+    state.subtitle = profileName + ' → ' + relativeName;
+    document.title = 'Relatives in Common — ' + profileName + ' → ' + relativeName;
+  } else {
+    state.subtitle = '';
+  }
 
   if (!profileId || !relativeId) {
     state.notice = 'Missing profile or relative id.';
@@ -147,14 +152,40 @@ async function load() {
   state.meta = 'Loading…';
 
   try {
-    const relatives = await getRelativesInCommon(profileId, relativeId);
+    const [relatives, savedRelatives] = await Promise.all([
+      getRelativesInCommon(profileId, relativeId),
+      getSavedRelatives(profileId),
+    ]);
+
     if (!relatives) {
       state.meta = '';
       state.notice = 'No saved comparison for this pair. Use "Get relatives in common" on the main page first.';
       return;
     }
 
-    state.relatives = relatives;
+    const byId = new Map();
+    for (const person of savedRelatives) {
+      if (person && person.relative_profile_id) byId.set(String(person.relative_profile_id), person);
+    }
+
+    // The common-relative rows do not always carry the fields used by the
+    // avatar. Fill them from the selected profile's saved relatives list.
+    state.relatives = relatives.map((relative) => {
+      const source = byId.get(String(relative.profile_id));
+      if (!source) return relative;
+
+      return {
+        ...relative,
+        first_name: relative.first_name || source.first_name,
+        last_name: relative.last_name || source.last_name,
+        first_initial: relative.first_initial || source.first_initial,
+        last_initial: relative.last_initial || source.last_initial,
+        initials: relative.initials || source.initials,
+        sex: relative.sex || source.sex,
+        profile_image_url: relative.profile_image_url || source.profile_image_url,
+      };
+    });
+
     state.meta = relatives.length + ' relative' + (relatives.length === 1 ? '' : 's') + ' in common';
   } catch {
     state.meta = '';

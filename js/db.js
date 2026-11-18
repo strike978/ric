@@ -75,6 +75,14 @@ export async function saveRelativesInCommon(profileId, relativeId, relatives) {
   });
 }
 
+// Reads the saved DNA relatives list for one profile.
+export async function getSavedRelatives(profileId) {
+  if (!profileId) return [];
+
+  const record = await db.profile_relatives.get(profileId);
+  return record && Array.isArray(record.relatives) ? record.relatives : [];
+}
+
 // Reads every saved pair for one profile.
 export async function getProfileRelativesInCommon(profileId) {
   if (!profileId) return [];
