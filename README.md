@@ -18,8 +18,10 @@ one's relatives-in-common list.
 
 1. Make sure you are signed in at <https://you.23andme.com> in this browser.
 2. Click the extension icon.
-3. Pick a profile from the menu. That profile's DNA relatives load right away,
-   with a spinner in the table.
+3. Pick a profile from the menu. That profile's DNA relatives load right away
+   with a spinner in the table. Each row shows the relative's avatar and name,
+   plus the estimated shared cM and number of segments. Click the avatar or
+   name to open the relative's profile on 23andMe.
 4. Click **Get relatives in common** to fetch comparisons for the loaded
    relatives. The **Delay (seconds)** and **Retry delay (seconds)** fields set
    the gap between requests (default 1.5 seconds) and the wait after a failure
@@ -61,6 +63,9 @@ The comparison page shows, for each relative in common:
   array.
 - The comparison page reads its data from IndexedDB; nothing is stored in
   `localStorage`.
+- The shared cM in the main table is estimated from 23andMe's percentage
+  (about 74.4 cM per percentage point); the segment count comes from the
+  response.
 - **Export** writes a real SQLite database (`.db`) using
   [sql.js](https://github.com/sql-js/sql.js). The tables are `metadata`,
   `profiles`, `relatives`, `pairs`, and `relatives_in_common`. Every saved field

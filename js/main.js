@@ -657,6 +657,82 @@ async function importData(file) {
 
 /* ---------- View ---------- */
 
+// 23andMe reports shared DNA as a proportion of the genome. Its cM scale is
+// about 74.4 cM per percentage point.
+const CM_PER_PERCENT = 74.4;
+
+function relativeName(relative) {
+  const name = [
+    relative.first_name || relative.first_initial,
+    relative.last_name || relative.last_initial,
+  ].filter(Boolean).join(' ');
+
+  return name || relative.initials || '—';
+}
+
+function relativeInitials(relative) {
+  if (relative.initials) return String(relative.initials).trim().slice(0, 3).toUpperCase();
+
+  const first = relative.first_initial || String(relative.first_name || '').trim().charAt(0);
+  const last = relative.last_initial || String(relative.last_name || '').trim().charAt(0);
+  return (first + last).toUpperCase() || '?';
+}
+
+function relativePhotoUrl(relative) {
+  const url = relative.profile_image_url;
+  return typeof url === 'string' && url ? url : null;
+}
+
+function relativeSex(relative) {
+  const sex = String(relative.sex || '').trim().toLowerCase();
+  if (sex === 'female' || sex === 'f') return 'female';
+  if (sex === 'male' || sex === 'm') return 'male';
+  return '';
+}
+
+function relativeAvatar(relative) {
+  const photo = relativePhotoUrl(relative);
+  const sex = relativeSex(relative);
+
+  return m('span', { class: sex ? 'avatar ' + sex : 'avatar', 'aria-hidden': 'true' }, [
+    photo
+      ? m('img', {
+          src: photo,
+          alt: '',
+          loading: 'lazy',
+          decoding: 'async',
+          referrerpolicy: 'no-referrer',
+          onerror: (event) => { event.target.style.display = 'none'; },
+        })
+      : m('span.avatar-initials', relativeInitials(relative)),
+  ]);
+}
+
+function relativeProfileUrl(relativeId) {
+  if (!state.selectedId || !relativeId) return null;
+
+  return 'https://you.23andme.com/p/' + encodeURIComponent(state.selectedId)
+    + '/profile/' + encodeURIComponent(relativeId) + '/';
+}
+
+function numericValue(value) {
+  if (value === undefined || value === null || value === '') return null;
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function sharedDnaLabel(relative) {
+  const proportion = numericValue(relative.ibd_proportion);
+  const segments = numericValue(relative.num_segments);
+  const parts = [];
+
+  if (proportion !== null) parts.push(Math.round(proportion * 100 * CM_PER_PERCENT) + ' cM');
+  if (segments !== null) parts.push(segments + (segments === 1 ? ' segment' : ' segments'));
+
+  return parts.length ? parts.join(' across ') : '—';
+}
+
 function actionFor(relative) {
   const relativeId = relative.relative_profile_id;
   const status = state.comparisons[relativeId];
@@ -774,24 +850,37 @@ const App = {
           }, [
             m('div.table-wrap', m('table.relatives-table', [
               m('thead', m('tr', [
-                m('th.num-col', '#'),
-                m('th', 'Initials'),
-                m('th', 'Relative profile ID'),
+                m('th', 'Relative'),
+                m('th', 'Shared DNA'),
                 m('th.actions-col', 'Relatives in common'),
               ])),
               m('tbody', state.relativesPhase === 'loading'
-                ? m('tr', m('td.empty', { colspan: 4 }, [
+                ? m('tr', m('td.empty', { colspan: 3 }, [
                     m('span.spinner'),
                     ' Loading relatives…',
                   ]))
                 : state.relatives.length
-                  ? state.relatives.map((relative, index) => m('tr', { key: relative.relative_profile_id || index }, [
-                      m('td.num', index + 1),
-                      m('td', relative.initials || ''),
-                      m('td.id', relative.relative_profile_id || ''),
-                      m('td.actions', actionFor(relative)),
-                    ]))
-                  : m('tr', m('td.empty', { colspan: 4 },
+                  ? state.relatives.map((relative, index) => {
+                      const profileUrl = relativeProfileUrl(relative.relative_profile_id);
+                      const person = [
+                        relativeAvatar(relative),
+                        m('span.relative-name', relativeName(relative)),
+                      ];
+
+                      return m('tr', { key: relative.relative_profile_id || index }, [
+                        m('td', profileUrl
+                          ? m('a.relative.relative-link', {
+                              href: profileUrl,
+                              target: '_blank',
+                              rel: 'noopener noreferrer',
+                              title: 'Open this relative on 23andMe',
+                            }, person)
+                          : m('div.relative', person)),
+                        m('td.dna', { title: 'Estimated from the shared percentage' }, sharedDnaLabel(relative)),
+                        m('td.actions', actionFor(relative)),
+                      ]);
+                    })
+                  : m('tr', m('td.empty', { colspan: 3 },
                       state.relativesPhase === 'error' ? 'Request failed' : 'No relatives'))),
             ])),
           ]),
