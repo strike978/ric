@@ -14,7 +14,7 @@ export const mainState = {
   relativesPhase: 'idle',    // idle | loading | ready | error
   comparisons: {},           // relative id -> loading | retrying | ready
   comparisonsRunning: false,
-  comparisonGapMs: 1500,     // delay between relatives-in-common requests
+  comparisonGapMs: 3000,     // delay between relatives-in-common requests
   retryDelayMs: 60000,       // delay before retrying a failed request
   comparisonProgress: null,  // { total, done, remainingMs } while fetching
   clearing: false,

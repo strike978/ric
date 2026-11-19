@@ -9,6 +9,7 @@ import { compareState as state } from './state.js';
 import { getRelativesInCommon, getSavedRelatives } from './db.js';
 import { avatar, displayName, profileUrl } from './person.js';
 import { formatRelationship } from './relationships.js';
+import { appNav, pageUrl } from './ui.js';
 
 const params = new URLSearchParams(location.search);
 const profileId = params.get('profile') || '';
@@ -116,7 +117,7 @@ async function load() {
 
     if (!relatives) {
       state.meta = '';
-      state.notice = 'No saved comparison for this pair. Use "Get relatives in common" on the main page first.';
+      state.notice = 'No saved comparison for this pair. Use "Fetch" on the main page first.';
       return;
     }
 
@@ -162,31 +163,34 @@ const App = {
     const options = sortOptions(columns);
 
     return [
-      m('header.topbar', m('div.brand', [
-        m('div.mark', { 'aria-hidden': 'true' }, [m('span'), m('span')]),
-        m('div', [
-          m('h1', 'Relatives in Common'),
-          m('p.sub', state.subtitle),
-        ]),
-      ])),
+      appNav({
+        title: 'Relatives in Common',
+        subtitle: state.subtitle,
+        actions: [
+          m('a.btn-flat.waves-effect', {
+            href: pageUrl('index.html'),
+          }, 'Main page'),
+        ],
+      }),
 
-      m('main', [
-        m('section.panel', [
+      m('main.container', [
+        m('section.card', [
+          m('div.card-content', [
           m('div.list-controls', [
             m('p.meta', state.meta),
-            m('div.sort-row', [
-              m('label.label', { for: 'sortSelect' }, 'Sort'),
-              m('select#sortSelect', {
+            m('div.sort-row', m('div.input-field.select-field', [
+              m('label.label.active', { for: 'sortSelect' }, 'Sort'),
+              m('select#sortSelect.browser-default', {
                 value: state.sort,
                 onchange: (event) => { state.sort = event.target.value; },
               }, options.map((option) => m('option', {
                 value: option.value,
                 selected: option.value === state.sort,
               }, option.label))),
-            ]),
+            ])),
           ]),
 
-          m('div.table-wrap', m('table.relatives-table', [
+          m('div.table-wrap', m('table.relatives-table.striped.highlight', [
             m('thead', m('tr', [
               m('th', 'Relative'),
               m('th', 'Sharing'),
@@ -222,9 +226,10 @@ const App = {
               : m('tr', m('td.empty', { colspan: 2 + columns.length * 2 },
                   state.loading ? 'Loading…' : 'No relatives in common'))),
           ])),
+          ]),
         ]),
 
-        m('p', { class: state.notice ? 'notice' : 'notice hidden' }, state.notice),
+        m('div', { class: state.notice ? 'card-panel notice' : 'card-panel notice hidden' }, state.notice),
       ]),
     ];
   },

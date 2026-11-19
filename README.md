@@ -23,9 +23,9 @@ pairwise IBD matrix and grouped by shared relatives.
    with a spinner in the table. Each row shows the relative's avatar and name,
    plus the estimated shared cM and number of segments. Click the avatar or
    name to open the relative's profile on 23andMe.
-4. Click **Get relatives in common** to fetch comparisons for the loaded
+4. Click **Fetch** to load comparisons for the loaded
    relatives. The **Delay (seconds)** and **Retry delay (seconds)** fields set
-   the gap between requests (default 1.5 seconds) and the wait after a failure
+   the gap between requests (default 3 seconds) and the wait after a failure
    (default 60 seconds); any non-negative value works. A spinner shows on the
    row being fetched; it becomes **Open** when ready. A progress bar shows how
    many are done and roughly how long is left. If a fetch fails, that same
@@ -33,15 +33,14 @@ pairwise IBD matrix and grouped by shared relatives.
    Chrome notification reports the failure (clicking it opens this page). Click
    **Stop** to cancel the run.
 5. Click **Open** to see the relatives in common for that pair.
-6. Click **View IBD matrix** to open the IBD matrix and shared-relative
-   networks for the selected profile. See below for what the page shows.
-7. Click **Export** at the bottom of the panel to save everything in the local
+6. Click **IBD matrix** to open the matrix and shared-relative networks
+   for the selected profile. See below for what the page shows.
+7. Click **Export** in the top-right toolbar to save everything in the local
    database to a `.db` SQLite file.
 8. Click **Import** to load a `.db` file made by **Export**. This replaces the
    whole local database with the file's contents.
-9. Click **Delete database** at the bottom of the panel to delete the whole
-   local database (all saved relatives and relatives-in-common data) from this
-   browser.
+9. Click **Delete** in the top-right toolbar to delete the whole local database
+   (all saved relatives and relatives-in-common data) from this browser.
 
 The comparison page title and subtitle show the names of the two people in the
 pair. For each relative in common it shows:
@@ -83,7 +82,7 @@ sets: relatives X and Z are linked when they have at least the chosen number of
 shared matches in common.
 
 The matrix is only as complete as the saved comparisons. If
-**Get relatives in common** has not been run, the matrix shows direct links to
+**Fetch** has not been run, the matrix shows direct links to
 the selected profile but no relative-to-relative networks.
 
 ## Notes
@@ -116,6 +115,8 @@ the selected profile but no relative-to-relative networks.
 - The database is built in memory while exporting, so a backup briefly needs
   memory for the whole file.
 - SQLite support uses sql.js (MIT), vendored under `vendor/`.
+- The UI uses Materialize CSS (MIT), vendored under `vendor/`, with a dark
+  theme override in `styles/material-dark.css`.
 - The comparison is fetched once and then opened instantly.
 - If you see a sign-in page or a Cloudflare check, open
   <https://you.23andme.com/> in a normal tab, sign in / clear the check, then reload

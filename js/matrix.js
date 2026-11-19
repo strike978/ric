@@ -10,6 +10,7 @@ import { matrixState as state } from './state.js';
 import { getSavedRelatives, getProfileRelativesInCommon } from './db.js';
 import { avatar, displayName, profileUrl } from './person.js';
 import { formatRelationship } from './relationships.js';
+import { appNav, pageUrl } from './ui.js';
 import {
   buildRelatednessModel,
   applyOverlapClusters,
@@ -29,14 +30,14 @@ state.ownerName = params.get('profile_name') || state.ownerId || 'Selected profi
 const MAX_MATRIX_PEOPLE = 500;
 
 const CLUSTER_COLORS = [
-  '#5b8def',
-  '#a855f7',
-  '#34d399',
-  '#f59e0b',
-  '#f472b6',
-  '#22d3ee',
-  '#f87171',
-  '#a3e635',
+  '#8ab4f8',
+  '#c58af9',
+  '#81c995',
+  '#fdd663',
+  '#f48fb1',
+  '#78d9ec',
+  '#f28b82',
+  '#a8dab5',
 ];
 
 /* ---------- Formatting ---------- */
@@ -157,13 +158,6 @@ function isSelectedPair(aId, bId) {
     || (selected.a === bId && selected.b === aId);
 }
 
-function pageUrl(name) {
-  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-    return chrome.runtime.getURL(name);
-  }
-  return name;
-}
-
 function linkedPerson(person, content) {
   if (!person || person.isOwner) return content;
 
@@ -223,7 +217,7 @@ async function load() {
     if (state.model.stats.totalPeople <= 1) {
       state.notice = 'No saved relatives for this profile. Load its DNA relatives on the main page first.';
     } else if (state.model.stats.savedPairs === 0) {
-      state.notice = 'No relatives-in-common comparisons are saved yet. The matrix only shows direct links to the selected profile. Use “Get relatives in common” on the main page, then reload this page.';
+      state.notice = 'No relatives-in-common comparisons are saved yet. The matrix only shows direct links to the selected profile. Use “Fetch” on the main page, then reload this page.';
     }
 
     document.title = 'Relatedness Matrix — ' + (state.ownerName || state.ownerId);
@@ -329,12 +323,12 @@ function heatStyle(value, model) {
   if (intensity === null) return {};
 
   const alpha = 0.08 + 0.74 * intensity;
-  return { background: 'rgba(91, 141, 239, ' + alpha.toFixed(2) + ')' };
+  return { background: 'rgba(66, 133, 244, ' + alpha.toFixed(2) + ')' };
 }
 
 function heatClass(value, model) {
   const intensity = heatIntensity(value, model);
-  return intensity !== null && intensity > 0.48 ? 'm-strong' : '';
+  return intensity !== null && intensity > 0.7 ? 'm-strong' : '';
 }
 
 function directIbdSummary(person) {
@@ -523,7 +517,7 @@ function matrixGroupRow(model, group, columnCount) {
       style: cluster
         ? {
             borderTopColor: color,
-            backgroundColor: color + '14',
+            backgroundColor: color + '22',
           }
         : {
             borderTopColor: '#2c3547',
@@ -545,13 +539,14 @@ function matrixView(model) {
         ? 'No family groups at this overlap threshold. Lower “Min shared matches” or turn off “Only network people”.'
         : 'No saved people to show.';
 
-  return m('section.panel.matrix-panel', [
+  return m('section.card.matrix-panel', [
+    m('div.card-content', [
     m('div.section-head', [
       m('div', [
         m('h2', 'Pairwise IBD'),
         m('p.meta', matrixMeta(model, selection)),
       ]),
-      m('button.link-button', {
+      m('button.btn-flat.waves-effect', {
         type: 'button',
         disabled: state.loading,
         onclick: load,
@@ -559,18 +554,18 @@ function matrixView(model) {
     ]),
 
     m('div.matrix-controls', [
-      m('label.field', [
-        m('span.label', 'Search'),
-        m('input', {
+      m('div.input-field.matrix-field', [
+        m('input#matrixSearch', {
           type: 'search',
           value: state.query,
           placeholder: 'Name or ID',
           oninput: (event) => { state.query = event.target.value; },
         }),
+        m('label.label.active', { for: 'matrixSearch' }, 'Search'),
       ]),
-      m('label.field', [
-        m('span.label', 'IBD metric'),
-        m('select', {
+      m('div.input-field.select-field', [
+        m('label.label.active', { for: 'matrixMetric' }, 'IBD metric'),
+        m('select#matrixMetric.browser-default', {
           value: state.metric,
           onchange: (event) => { state.metric = event.target.value; },
         }, [
@@ -581,11 +576,10 @@ function matrixView(model) {
           }, 'IBD segments'),
         ]),
       ]),
-      m('label.field', {
+      m('div.input-field.matrix-field', {
         title: 'Minimum shared matches two relatives must have in common to be placed in the same family group.',
       }, [
-        m('span.label', 'Min shared matches'),
-        m('input', {
+        m('input#matrixMinOverlap', {
           type: 'number',
           min: '2',
           max: '65535',
@@ -605,10 +599,11 @@ function matrixView(model) {
             state.cluster = 'all';
           },
         }),
+        m('label.label.active', { for: 'matrixMinOverlap' }, 'Min shared matches'),
       ]),
-      m('label.field', [
-        m('span.label', 'Family group'),
-        m('select', {
+      m('div.input-field.select-field', [
+        m('label.label.active', { for: 'matrixGroup' }, 'Family group'),
+        m('select#matrixGroup.browser-default', {
           value: state.cluster,
           title: 'Family groups are relatives grouped by how many shared matches they have in common.',
           onchange: (event) => {
@@ -621,9 +616,9 @@ function matrixView(model) {
           }, 'Group ' + cluster.index + ' (' + cluster.members.length + ')')),
         ]),
       ]),
-      m('label.field', [
-        m('span.label', 'Show'),
-        m('select', {
+      m('div.input-field.select-field', [
+        m('label.label.active', { for: 'matrixShow' }, 'Show'),
+        m('select#matrixShow.browser-default', {
           value: state.maxPeople,
           onchange: (event) => { state.maxPeople = event.target.value; },
         }, [
@@ -648,7 +643,7 @@ function matrixView(model) {
         }),
         m('span', 'Only network people'),
       ]),
-      m('button.link-button', { type: 'button', onclick: resetFilters }, 'Reset'),
+      m('button.btn-flat.waves-effect', { type: 'button', onclick: resetFilters }, 'Reset'),
     ]),
 
     Number(state.maxPeople) >= 250
@@ -724,7 +719,7 @@ function matrixView(model) {
       : m('div.matrix-empty', [
           m('p', emptyMessage),
           state.networkOnly && !state.query.trim() && state.cluster === 'all'
-            ? m('button.link-button', {
+            ? m('button.btn-flat.waves-effect', {
                 type: 'button',
                 onclick: () => { state.networkOnly = false; },
               }, 'Show every relative')
@@ -732,6 +727,7 @@ function matrixView(model) {
         ]),
 
     m('p.footnote', 'IBD is only as complete as the comparisons saved on the main page.'),
+    ]),
   ]);
 }
 
@@ -752,7 +748,7 @@ function personCard(model, person) {
     ? 'Selected profile'
     : parts.length ? parts.join(' · ') : 'No direct IBD saved';
 
-  return m('div.person-card', [
+  return m('div.person-card.card-panel', [
     avatar(person),
     m('div.person-card-body', [
       m('div.person-card-name', linkedPerson(person, fullName(person))),
@@ -769,7 +765,7 @@ function personCard(model, person) {
 }
 
 function metric(label, value) {
-  return m('div.metric', [
+  return m('div.metric.card-panel', [
     m('div.metric-value', value),
     m('div.metric-label', label),
   ]);
@@ -841,7 +837,7 @@ function sharedMatchesView(model, a, b) {
 
   return m('div.shared-matches', [
     m('h3', 'Shared matches (' + result.matches.length + ')'),
-    m('div.table-wrap.matches-wrap', m('table.relatives-table.matches-table', [
+    m('div.table-wrap.matches-wrap', m('table.relatives-table.matches-table.striped.highlight', [
       m('thead', m('tr', [
         m('th', 'Shared match'),
         m('th', relationColumn(aShort)),
@@ -878,7 +874,8 @@ function detailsView(model) {
   const aRelToB = relationshipOf(edge, b.id, a.id);
   const overlap = sharedMatchOverlap(model, a.id, b.id);
 
-  return m('section.panel.pair-details', { id: 'pair-details' }, [
+  return m('section.card.pair-details', { id: 'pair-details' }, [
+    m('div.card-content', [
     m('div.section-head', [
       m('div', [
         m('h2', 'Pair details'),
@@ -886,7 +883,7 @@ function detailsView(model) {
           ? edge.observations + ' saved observation' + (edge.observations === 1 ? '' : 's')
           : 'No pairwise link saved'),
       ]),
-      m('button.link-button', {
+      m('button.btn-flat.waves-effect', {
         type: 'button',
         onclick: () => { state.selected = null; },
       }, 'Close'),
@@ -922,6 +919,7 @@ function detailsView(model) {
       : null,
 
     sharedMatchesView(model, a, b),
+    ]),
   ]);
 }
 
@@ -932,32 +930,27 @@ const App = {
     const model = state.model;
 
     return [
-      m('header.topbar', [
-        m('div.brand', [
-          m('div.mark', { 'aria-hidden': 'true' }, [m('span'), m('span')]),
-          m('div', [
-            m('h1', 'Relatedness Matrix'),
-            m('p.sub', state.ownerName + (state.ownerId ? ' · ' + state.ownerId : '')),
-          ]),
-        ]),
-        m('div.top-actions', [
-          m('a.link-button', { href: pageUrl('index.html') }, 'Back to relatives'),
-        ]),
-      ]),
+      appNav({
+        title: 'Relatedness Matrix',
+        subtitle: state.ownerName + (state.ownerId ? ' · ' + state.ownerId : ''),
+        actions: [
+          m('a.btn-flat.waves-effect', { href: pageUrl('index.html') }, 'Back to relatives'),
+        ],
+      }),
 
-      m('main', [
+      m('main.container', [
         !model
-          ? m('section.panel', [
+          ? m('section.card', m('div.card-content', [
               m('p.meta', state.loading
                 ? [m('span.spinner'), ' ' + state.loadingText]
                 : 'No relatedness data loaded.'),
-            ])
+            ]))
           : [
               matrixView(model),
               detailsView(model),
             ],
 
-        m('p', { class: state.notice ? 'notice' : 'notice hidden' }, state.notice),
+        m('div', { class: state.notice ? 'card-panel notice' : 'card-panel notice hidden' }, state.notice),
       ]),
     ];
   },

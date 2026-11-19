@@ -25,6 +25,7 @@ import {
 } from './db.js';
 import { avatar, displayName, profileUrl } from './person.js';
 import { exportDatabaseFile, readDatabaseBackup } from './sqlite.js';
+import { appNav } from './ui.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
 
@@ -714,7 +715,7 @@ function actionFor(relative) {
   if (status === 'loading') return m('span.spinner', { title: 'Loading' });
   if (status === 'retrying') return m('span.action-retry', { title: 'Failed; retrying in ' + formatRemaining(state.retryDelayMs) }, 'Retrying…');
   if (status === 'ready') {
-    return m('button.link-button', {
+    return m('button.btn-flat.btn-small.waves-effect', {
       type: 'button',
       onclick: () => openComparison(relativeId),
     }, 'Open');
@@ -740,56 +741,77 @@ const App = {
       : '';
 
     return [
-      m('header.topbar', m('div.brand', [
-        m('div.mark', { 'aria-hidden': 'true' }, [m('span'), m('span')]),
-        m('h1', 'Relatives in Common'),
-      ])),
+      appNav({
+        title: 'Relatives in Common',
+        actions: [
+          m('button.btn-flat.waves-effect', {
+            type: 'button',
+            title: 'Download the saved database as a SQLite .db file',
+            disabled: state.transferring || state.clearing
+              || state.relativesPhase === 'loading' || state.comparisonsRunning,
+            onclick: exportData,
+          }, state.transferring === 'export' ? 'Exporting…' : 'Export'),
+          m('button.btn-flat.waves-effect', {
+            type: 'button',
+            title: 'Load a previously exported SQLite .db file',
+            disabled: state.transferring || state.clearing
+              || state.relativesPhase === 'loading' || state.comparisonsRunning,
+            onclick: chooseImportFile,
+          }, state.transferring === 'import' ? 'Importing…' : 'Import'),
+          m('button.btn-flat.waves-effect.red-text', {
+            type: 'button',
+            title: 'Delete the entire local database',
+            disabled: state.clearing || state.transferring
+              || state.relativesPhase === 'loading' || state.comparisonsRunning,
+            onclick: deleteData,
+          }, state.clearing ? 'Deleting…' : 'Delete'),
+        ],
+      }),
 
-      m('main', [
-        m('section.panel', [
-          m('label.label', { for: 'profileSelect' }, 'Profile'),
+      m('main.container', [
+        m('section.card', [
+          m('div.card-content', [
+          m('div.input-field.select-field', [
+            m('label.label.active', { for: 'profileSelect' }, 'Profile'),
+            m('select#profileSelect.browser-default', {
+              disabled: state.phase !== 'ready',
+              value: state.selectedId,
+              onchange: (event) => {
+                state.selectedId = event.target.value;
+                state.relatives = [];
+                state.relativesPhase = 'idle';
+                cancelComparisons();
+                state.comparisons = {};
+                state.notice = '';
 
-          m('select#profileSelect', {
-            disabled: state.phase !== 'ready',
-            value: state.selectedId,
-            onchange: (event) => {
-              state.selectedId = event.target.value;
-              state.relatives = [];
-              state.relativesPhase = 'idle';
-              cancelComparisons();
-              state.comparisons = {};
-              state.notice = '';
-
-              // Picking a profile loads its relatives right away.
-              loadRelatives();
-            },
-          }, [
-            m('option', { value: '', selected: state.selectedId === '' }, placeholder),
-            ...state.profiles.map((profile) => m('option', {
-              value: profile.id,
-              selected: profile.id === state.selectedId,
-            }, [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id)),
-          ]),
-
-          m('div', { class: state.selectedId ? 'id-box' : 'id-box hidden' }, [
-            m('span.id-label', 'ID'),
-            m('code.id-value', state.selectedId),
+                // Picking a profile loads its relatives right away.
+                loadRelatives();
+              },
+            }, [
+              m('option', { value: '', selected: state.selectedId === '' }, placeholder),
+              ...state.profiles.map((profile) => m('option', {
+                value: profile.id,
+                selected: profile.id === state.selectedId,
+              }, [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id)),
+            ]),
           ]),
 
           m('div.button-row', [
-            m('button.secondary', {
+            m('button', {
               type: 'button',
+              class: state.comparisonsRunning ? 'btn red waves-effect' : 'btn waves-effect',
               disabled: state.relatives.length === 0,
+              title: 'Fetch each relative’s shared matches with you',
               onclick: state.comparisonsRunning ? stopComparisons : getRelativesInCommon,
-            }, state.comparisonsRunning ? 'Stop' : 'Get relatives in common'),
-            m('button.secondary', {
+            }, state.comparisonsRunning ? 'Stop' : 'Fetch'),
+            m('button.btn.waves-effect', {
               type: 'button',
               disabled: !state.selectedId,
-              title: 'Open the pairwise IBD matrix and shared-relative networks',
+              title: 'Open the pairwise IBD matrix',
               onclick: openMatrix,
-            }, 'View IBD matrix'),
-            m('div.delay-field', [
-              m('label.label', { for: 'requestDelay' }, 'Delay (seconds)'),
+            }, 'IBD matrix'),
+            m('div.input-field.delay-field', [
+              m('label.label.active', { for: 'requestDelay' }, 'Delay (seconds)'),
               m('input#requestDelay', {
                 type: 'number',
                 min: '0',
@@ -799,8 +821,8 @@ const App = {
                 onchange: delayChangeHandler('comparisonGapMs'),
               }),
             ]),
-            m('div.delay-field', [
-              m('label.label', { for: 'retryDelay' }, 'Retry delay (seconds)'),
+            m('div.input-field.delay-field', [
+              m('label.label.active', { for: 'retryDelay' }, 'Retry delay (seconds)'),
               m('input#retryDelay', {
                 type: 'number',
                 min: '0',
@@ -812,13 +834,13 @@ const App = {
             ]),
           ]),
 
-          m('div.progress', { class: progress ? 'progress' : 'progress hidden' }, [
-            m('div.progress-track', {
+          m('div.progress-block', { class: progress ? '' : 'hidden' }, [
+            m('div.progress', {
               role: 'progressbar',
               'aria-valuemin': 0,
               'aria-valuemax': progress ? progress.total : 0,
               'aria-valuenow': progress ? progress.done : 0,
-            }, m('div.progress-fill', { style: { width: progressPercent + '%' } })),
+            }, m('div.determinate', { style: { width: progressPercent + '%' } })),
             m('p.progress-label', { 'aria-live': 'polite' }, progressText),
           ]),
 
@@ -828,7 +850,7 @@ const App = {
               || state.relatives.length
               ? 'output' : 'output hidden',
           }, [
-            m('div.table-wrap', m('table.relatives-table', [
+            m('div.table-wrap', m('table.relatives-table.striped.highlight', [
               m('thead', m('tr', [
                 m('th', 'Relative'),
                 m('th', 'Shared DNA'),
@@ -864,35 +886,11 @@ const App = {
                       state.relativesPhase === 'error' ? 'Request failed' : 'No relatives'))),
             ])),
           ]),
-
-          m('div.panel-footer', [
-            m('span.footnote', 'Saved data stays in this browser. Export it to back it up or move it.'),
-            m('div.footer-actions', [
-              m('button.link-button', {
-                type: 'button',
-                title: 'Download the saved database as a SQLite .db file',
-                disabled: state.transferring || state.clearing
-                  || state.relativesPhase === 'loading' || state.comparisonsRunning,
-                onclick: exportData,
-              }, state.transferring === 'export' ? 'Exporting…' : 'Export'),
-              m('button.link-button', {
-                type: 'button',
-                title: 'Load a previously exported SQLite .db file',
-                disabled: state.transferring || state.clearing
-                  || state.relativesPhase === 'loading' || state.comparisonsRunning,
-                onclick: chooseImportFile,
-              }, state.transferring === 'import' ? 'Importing…' : 'Import'),
-              m('button.link-button.danger', {
-                type: 'button',
-                disabled: state.clearing || state.transferring
-                  || state.relativesPhase === 'loading' || state.comparisonsRunning,
-                onclick: deleteData,
-              }, state.clearing ? 'Deleting…' : 'Delete database'),
-            ]),
           ]),
+
         ]),
 
-        m('p', { class: state.notice ? 'notice' : 'notice hidden' }, [
+        m('div', { class: state.notice ? 'card-panel notice' : 'card-panel notice hidden' }, [
           state.notice,
           state.noticeLink
             ? m('a.notice-link', {
