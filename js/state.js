@@ -18,6 +18,7 @@ export const mainState = {
   retryDelayMs: 60000,       // delay before retrying a failed request
   comparisonProgress: null,  // { total, done, remainingMs } while fetching
   clearing: false,
+  clearingProfile: false,      // true while one profile's saved data is deleted
   transferring: '',           // '' | export | import while a transfer is read/written
   notice: '',
   noticeLink: '',          // optional URL shown as a link next to the notice
@@ -31,5 +32,31 @@ export const compareState = {
   sort: 'ibd:1:desc',       // ibd:N:asc | ibd:N:desc (saved only as fallback)
   loading: false,
   notice: '',
+};
+
+// Shared DNA network page: one profile's relatives as a force-directed graph.
+export const networkState = {
+  loading: true,
+  notice: '',
+  profileId: '',
+  profileName: '',
+  owner: null,
+  nodes: [],               // owner + relatives, with x/y/radius/adjacency
+  edges: [],               // owner-relative and relative-relative connections
+  adjacency: new Map(),    // node id -> [{ node, edge }]
+  stats: {
+    relatives: 0,
+    matches: 0,
+    matchTotal: 0,
+    linkedMatches: 0,
+    connections: 0,
+    shared: 0,
+    confirmed: 0,
+    oneSided: 0,
+  },
+  selectedId: '',          // node id, or '' for the overview
+  labels: true,            // draw names next to nodes
+  showAllLinks: false,     // false = strongest shared links + hovered node only
+  scope: 'linked',         // relatives | linked | all
 };
 

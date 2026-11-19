@@ -20,6 +20,7 @@ import {
   saveRelatives,
   saveRelativesInCommon,
   getProfileRelativesInCommon,
+  deleteProfileData,
   deleteDatabase,
   exportDatabaseJson,
   exportDatabaseJsonStream,
@@ -30,8 +31,9 @@ import {
 } from './db.js';
 import { readJsonProfiles } from './reader.js';
 import { avatar, displayName, profileUrl } from './person.js';
+import { sharedDnaLabel } from './dna.js';
 import { labelName } from './preferences.js';
-import { appHeader, dataMenu } from './header.js';
+import { appHeader, dataMenu, pageUrl } from './header.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
 
@@ -506,9 +508,25 @@ function openComparison(relativeId) {
   else window.open(url, '_blank', 'noopener');
 }
 
+// Opens the saved shared DNA network for the selected profile.
+function networkUrl() {
+  const base = pageUrl('network.html');
+  if (!state.selectedId) return base;
+
+  const profile = state.profiles.find((item) => item.id === state.selectedId);
+  const name = profile
+    ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id
+    : state.selectedId;
+
+  return base
+    + '?profile=' + encodeURIComponent(state.selectedId)
+    + '&profile_name=' + encodeURIComponent(name);
+}
+
 // Deletes the whole local database after confirmation.
 async function deleteData() {
-  if (state.clearing || state.transferring || state.relativesPhase === 'loading' || state.comparisonsRunning) return;
+  if (state.clearing || state.clearingProfile || state.transferring
+    || state.relativesPhase === 'loading' || state.comparisonsRunning) return;
 
   const confirmed = window.confirm(
     'Delete the entire local database and all saved relatives and relatives-in-common data from this browser?'
@@ -522,14 +540,62 @@ async function deleteData() {
 
   try {
     await deleteDatabase();
+    state.selectedId = '';
     state.relatives = [];
     state.relativesPhase = 'idle';
     state.comparisons = {};
+    state.comparisonProgress = null;
+    state.noticeLink = '';
     state.notice = 'Local database deleted.';
   } catch (err) {
     state.notice = 'Could not delete the local database: ' + (err.message || err);
   } finally {
     state.clearing = false;
+    m.redraw.sync();
+  }
+}
+
+// Deletes only the selected profile's saved relatives and comparison data.
+async function clearProfileData() {
+  if (!state.selectedId || state.clearingProfile || state.clearing || state.transferring
+    || state.relativesPhase === 'loading' || state.comparisonsRunning) return;
+
+  const profileId = state.selectedId;
+  const profile = state.profiles.find((item) => item.id === profileId);
+  const name = profile
+    ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id
+    : profileId;
+
+  const confirmed = window.confirm(
+    'Delete all saved relatives and relatives-in-common data for ' + name
+    + '? Other profiles will not be affected.',
+  );
+  if (!confirmed) return;
+
+  cancelComparisons();
+  relativesSeq++;
+  if (relativesXhr) {
+    relativesXhr.abort();
+    relativesXhr = null;
+  }
+
+  state.clearingProfile = true;
+  state.notice = '';
+  state.noticeLink = '';
+  m.redraw.sync();
+
+  try {
+    await deleteProfileData(profileId);
+    state.selectedId = '';
+    state.relatives = [];
+    state.relativesPhase = 'idle';
+    state.comparisons = {};
+    state.comparisonProgress = null;
+    state.notice = 'Deleted saved data for ' + name + '.';
+  } catch (err) {
+    state.notice = 'Could not delete saved data for ' + name + ': ' + (err.message || err);
+  } finally {
+    state.clearingProfile = false;
     m.redraw.sync();
   }
 }
@@ -740,28 +806,6 @@ async function importData(file) {
 
 /* ---------- View ---------- */
 
-// 23andMe reports shared DNA as a proportion of the genome. Its cM scale is
-// about 74.4 cM per percentage point.
-const CM_PER_PERCENT = 74.4;
-
-function numericValue(value) {
-  if (value === undefined || value === null || value === '') return null;
-
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-function sharedDnaLabel(relative) {
-  const proportion = numericValue(relative.ibd_proportion);
-  const segments = numericValue(relative.num_segments);
-  const parts = [];
-
-  if (proportion !== null) parts.push(Math.round(proportion * 100 * CM_PER_PERCENT) + ' cM');
-  if (segments !== null) parts.push(segments + (segments === 1 ? ' segment' : ' segments'));
-
-  return parts.length ? parts.join(' across ') : '—';
-}
-
 function actionFor(relative) {
   const relativeId = relative.relative_profile_id;
   const status = state.comparisons[relativeId];
@@ -798,8 +842,12 @@ const App = {
       appHeader({
         title: 'Relatives in Common',
         actions: [
+          state.selectedId ? m('a.btn-flat.waves-effect', {
+            href: networkUrl(),
+            title: 'View this profile’s relatives as a shared DNA network',
+          }, 'Shared DNA') : null,
           dataMenu({
-            busy: state.transferring || state.clearing
+            busy: state.transferring || state.clearing || state.clearingProfile
               || state.relativesPhase === 'loading' || state.comparisonsRunning,
             exporting: state.transferring === 'export',
             importing: state.transferring === 'import',
@@ -814,39 +862,51 @@ const App = {
       m('main.container', [
         m('section.card', [
           m('div.card-content', [
-          m('div.input-field.select-field', [
-            m('label.label.active', { for: 'profileSelect' }, 'Profile'),
-            m('select#profileSelect.browser-default', {
-              disabled: state.phase !== 'ready',
-              value: state.selectedId,
-              onchange: (event) => {
-                state.selectedId = event.target.value;
-                state.relatives = [];
-                state.relativesPhase = 'idle';
-                cancelComparisons();
-                state.comparisons = {};
-                state.notice = '';
+          m('div.profile-row', [
+            m('div.input-field.select-field', [
+              m('label.label.active', { for: 'profileSelect' }, 'Profile'),
+              m('select#profileSelect.browser-default', {
+                disabled: state.phase !== 'ready' || state.clearingProfile,
+                value: state.selectedId,
+                onchange: (event) => {
+                  state.selectedId = event.target.value;
+                  state.relatives = [];
+                  state.relativesPhase = 'idle';
+                  cancelComparisons();
+                  state.comparisons = {};
+                  state.notice = '';
 
-                // Picking a profile loads its relatives right away.
-                loadRelatives();
-              },
-            }, [
-              m('option', { value: '', selected: state.selectedId === '' }, placeholder),
-              ...state.profiles.map((profile) => m('option', {
-                value: profile.id,
-                selected: profile.id === state.selectedId,
-              }, [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id)),
+                  // Picking a profile loads its relatives right away.
+                  loadRelatives();
+                },
+              }, [
+                m('option', { value: '', selected: state.selectedId === '' }, placeholder),
+                ...state.profiles.map((profile) => m('option', {
+                  value: profile.id,
+                  selected: profile.id === state.selectedId,
+                }, [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id)),
+              ]),
             ]),
+            m('button.profile-clear.btn-flat.btn-small.waves-effect', {
+              type: 'button',
+              title: state.selectedId
+                ? 'Delete all saved data for the selected profile'
+                : 'Choose a profile first',
+              disabled: !state.selectedId || state.clearingProfile || state.clearing
+                || state.transferring || state.relativesPhase === 'loading'
+                || state.comparisonsRunning,
+              onclick: clearProfileData,
+            }, state.clearingProfile ? 'Clearing…' : 'Clear profile data'),
           ]),
 
           m('div.button-row', [
             m('button', {
               type: 'button',
               class: state.comparisonsRunning ? 'btn red waves-effect' : 'btn waves-effect',
-              disabled: state.relatives.length === 0,
-              title: 'Fetch each relative’s shared matches with you',
+              disabled: state.relatives.length === 0 || state.clearingProfile,
+              title: 'Start loading each relative’s shared matches with you',
               onclick: state.comparisonsRunning ? stopComparisons : getRelativesInCommon,
-            }, state.comparisonsRunning ? 'Stop' : 'Fetch'),
+            }, state.comparisonsRunning ? 'Stop' : 'Start'),
             m('div.delay-field', [
               m('label.label.active', { for: 'requestDelay' }, 'Delay (seconds)'),
               m('input#requestDelay', {

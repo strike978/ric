@@ -122,7 +122,7 @@ async function load() {
 
     if (!relatives) {
       state.meta = '';
-      state.notice = 'No saved comparison for this pair. Use "Fetch" on the main page first.';
+      state.notice = 'No saved comparison for this pair. Use "Start" on the main page first.';
       return;
     }
 
@@ -183,6 +183,13 @@ const App = {
         title: 'Relatives in Common',
         subtitle,
         actions: [
+          m('a.btn-flat.waves-effect', {
+            href: pageUrl('network.html')
+              + '?profile=' + encodeURIComponent(profileId)
+              + '&profile_name=' + encodeURIComponent(profileName)
+              + '&relative=' + encodeURIComponent(relativeId),
+            title: 'View all relatives as a shared DNA network',
+          }, 'Shared DNA'),
           m('a.btn-flat.waves-effect', {
             href: pageUrl('index.html'),
           }, 'Back to relatives'),

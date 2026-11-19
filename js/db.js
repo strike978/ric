@@ -104,6 +104,16 @@ export async function getRelativesInCommon(profileId, relativeId) {
   return pair ? pair.relatives : null;
 }
 
+// Deletes the saved relatives and relatives-in-common data for one profile.
+export async function deleteProfileData(profileId) {
+  if (!profileId) return;
+
+  await db.transaction('rw', db.profile_relatives, db.relatives_in_common, async () => {
+    await db.profile_relatives.delete(profileId);
+    await db.relatives_in_common.delete(profileId);
+  });
+}
+
 // Deletes the whole local database, including its schema. A fresh, unopened
 // Dexie instance is created so the next write recreates the database.
 export async function deleteDatabase() {
