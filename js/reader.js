@@ -6,7 +6,7 @@
  * be loaded or parsed all at once.
  */
 
-export const EXPORT_FORMAT = 'relatives-in-common-json';
+export const EXPORT_FORMAT = 'relatives-in-common';
 export const EXPORT_VERSION = 1;
 
 function isWhitespace(ch) {

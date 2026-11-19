@@ -37,13 +37,18 @@ function relationshipIndexes(relatives) {
 /* ---------- Sorting ---------- */
 
 function sortOptions(indexes) {
-  const options = [{ value: 'saved', label: 'Saved order' }];
+  const options = [];
 
   for (const index of indexes) {
     options.push(
       { value: 'ibd:' + index + ':desc', label: 'IBD ' + index + ' (high to low)' },
       { value: 'ibd:' + index + ':asc', label: 'IBD ' + index + ' (low to high)' },
     );
+  }
+
+  // Fallback only when the response has no IBD columns at all.
+  if (options.length === 0) {
+    return [{ value: 'saved', label: 'Saved order' }];
   }
 
   return options;
@@ -144,6 +149,9 @@ async function load() {
       };
     });
 
+    const indexes = relationshipIndexes(state.relatives);
+    state.sort = indexes.length ? 'ibd:' + indexes[0] + ':desc' : 'saved';
+
     state.meta = relatives.length + ' relative' + (relatives.length === 1 ? '' : 's') + ' in common';
   } catch {
     state.meta = '';
@@ -193,11 +201,11 @@ const App = {
           m('div.table-wrap', m('table.relatives-table.striped.highlight', [
             m('thead', m('tr', [
               m('th', 'Relative'),
-              m('th', 'Sharing'),
               ...columns.flatMap((index) => [
                 m('th', 'Rel ' + index),
                 m('th', 'IBD ' + index),
               ]),
+              m('th', 'Sharing'),
             ])),
             m('tbody', rows.length
               ? rows.map((relative) => {
@@ -216,11 +224,11 @@ const App = {
                           title: 'Open this profile on 23andMe',
                         }, person)
                       : m('div.relative', person)),
-                    m('td', relative.is_open_sharing === undefined || relative.is_open_sharing === null ? '—' : (relative.is_open_sharing ? 'yes' : 'no')),
                     ...columns.flatMap((index) => [
                       m('td', formatRelationship(relative['predicted_relationship_id_' + index])),
                       m('td', percentageLabel(relative['ibd_proportion_' + index])),
                     ]),
+                    m('td', relative.is_open_sharing === undefined || relative.is_open_sharing === null ? '—' : (relative.is_open_sharing ? 'yes' : 'no')),
                   ]);
                 })
               : m('tr', m('td.empty', { colspan: 2 + columns.length * 2 },

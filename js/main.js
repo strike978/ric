@@ -505,24 +505,6 @@ function openComparison(relativeId) {
   else window.open(url, '_blank', 'noopener');
 }
 
-// Opens the relatedness matrix page for the selected profile. The page reads
-// the saved relatives and comparisons from IndexedDB.
-function openMatrix() {
-  if (!state.selectedId) return;
-
-  const profile = state.profiles.find((item) => item.id === state.selectedId);
-  const profileName = profile
-    ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id
-    : state.selectedId;
-
-  const url = chrome.runtime.getURL('matrix.html')
-    + '?profile=' + encodeURIComponent(state.selectedId)
-    + '&profile_name=' + encodeURIComponent(profileName);
-
-  if (chrome.tabs && chrome.tabs.create) chrome.tabs.create({ url });
-  else window.open(url, '_blank', 'noopener');
-}
-
 // Deletes the whole local database after confirmation.
 async function deleteData() {
   if (state.clearing || state.transferring || state.relativesPhase === 'loading' || state.comparisonsRunning) return;
@@ -875,13 +857,7 @@ const App = {
               title: 'Fetch each relative’s shared matches with you',
               onclick: state.comparisonsRunning ? stopComparisons : getRelativesInCommon,
             }, state.comparisonsRunning ? 'Stop' : 'Fetch'),
-            m('button.btn.waves-effect', {
-              type: 'button',
-              disabled: !state.selectedId,
-              title: 'Open the pairwise IBD matrix',
-              onclick: openMatrix,
-            }, 'IBD matrix'),
-            m('div.input-field.delay-field', [
+            m('div.delay-field', [
               m('label.label.active', { for: 'requestDelay' }, 'Delay (seconds)'),
               m('input#requestDelay', {
                 type: 'number',
@@ -892,7 +868,7 @@ const App = {
                 onchange: delayChangeHandler('comparisonGapMs'),
               }),
             ]),
-            m('div.input-field.delay-field', [
+            m('div.delay-field', [
               m('label.label.active', { for: 'retryDelay' }, 'Retry delay (seconds)'),
               m('input#retryDelay', {
                 type: 'number',
