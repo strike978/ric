@@ -5,7 +5,8 @@ a 23andMe profile.
 
 It uses the 23andMe session already open in your browser. There is no separate login
 and no password is stored. Pick a profile, load its DNA relatives, and ask for each
-one's relatives-in-common list.
+one's relatives-in-common list. The saved comparisons can also be viewed as a
+pairwise IBD matrix and grouped by shared relatives.
 
 ## Install
 
@@ -32,11 +33,13 @@ one's relatives-in-common list.
    Chrome notification reports the failure (clicking it opens this page). Click
    **Stop** to cancel the run.
 5. Click **Open** to see the relatives in common for that pair.
-6. Click **Export** at the bottom of the panel to save everything in the local
+6. Click **View IBD matrix** to open the IBD matrix and shared-relative
+   networks for the selected profile. See below for what the page shows.
+7. Click **Export** at the bottom of the panel to save everything in the local
    database to a `.db` SQLite file.
-7. Click **Import** to load a `.db` file made by **Export**. This replaces the
+8. Click **Import** to load a `.db` file made by **Export**. This replaces the
    whole local database with the file's contents.
-8. Click **Delete database** at the bottom of the panel to delete the whole
+9. Click **Delete database** at the bottom of the panel to delete the whole
    local database (all saved relatives and relatives-in-common data) from this
    browser.
 
@@ -48,6 +51,40 @@ pair. For each relative in common it shows:
 - whether they share openly
 - every predicted relationship and IBD percentage returned (usually two)
 - sortable by saved order or any available IBD percentage
+
+## Relatedness matrix
+
+The matrix page reads the selected profile's saved data and turns it into a
+pairwise relatedness graph. It makes no new requests.
+
+- **Matrix**: rows and columns are the selected profile plus its relatives.
+  Cells show **IBD** — identical-by-descent sharing — not the estimated shared
+  DNA percentage. The default is the IBD segment count; the metric picker can
+  switch to IBD proportion. Click a filled cell to open pair details.
+- **Pair details**: both profile IDs and names, IBD proportion, IBD segment
+  count, the predicted relationship in each direction, and the list of shared
+  matches. Each shared match shows its ID, name, predicted relationship to both
+  people, and its IBD proportion and segment count with both.
+- **Family groups**: two relatives are linked when they have at least the
+  chosen **Min shared matches** in common (3 by default). Connected relatives
+  form family groups. The matrix is ordered and color-coded by group, with a
+  labeled group band across the columns and down the rows. The **Family group**
+  picker narrows it to one group. Raise the minimum to split very broad groups;
+  lower it to merge them.
+
+How a link is found: a saved relatives-in-common row for the pair
+`(selected profile, relative X)` lists a shared match `Y` with two sides. One
+side is `Y`'s relationship and IBD sharing with the selected profile, and the
+other is `Y`'s relationship and IBD sharing with `X`. The owner side is matched
+against the selected profile's saved relatives list, and the other side becomes
+the `X`–`Y` link. Two relatives' shared matches are the intersection of both
+saved lists. Family groups are built from the overlap of those shared-match
+sets: relatives X and Z are linked when they have at least the chosen number of
+shared matches in common.
+
+The matrix is only as complete as the saved comparisons. If
+**Get relatives in common** has not been run, the matrix shows direct links to
+the selected profile but no relative-to-relative networks.
 
 ## Notes
 
@@ -62,8 +99,8 @@ pair. For each relative in common it shows:
   every returned field, and every relative in common is kept. Each profile
   record has a `pairs` array; each pair has the relative's id and a `relatives`
   array.
-- The comparison page reads its data from IndexedDB; nothing is stored in
-  `localStorage`.
+- The comparison and matrix pages read their data from IndexedDB; nothing is
+  stored in `localStorage`.
 - The shared cM in the main table is estimated from 23andMe's percentage
   (about 74.4 cM per percentage point); the segment count comes from the
   response.

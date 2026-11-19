@@ -32,3 +32,20 @@ export const compareState = {
   loading: false,
   notice: '',
 };
+
+// Relatedness matrix page: one selected profile and all of its saved data.
+export const matrixState = {
+  ownerId: '',
+  ownerName: '',
+  loading: true,
+  loadingText: 'Reading saved relatives…',
+  model: null,              // built by relatedness.js
+  notice: '',
+  query: '',
+  metric: 'segments',       // segments | proportion
+  minOverlap: '3',          // minimum shared matches for a family group link
+  networkOnly: false,       // hide people with no family-group membership
+  cluster: 'all',           // all | c1 | c2 ...
+  maxPeople: '50',          // 25 | 50 | 100 | 150 | 250 | 500
+  selected: null,           // { a, b } ids for the pair-details panel
+};

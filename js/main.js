@@ -499,6 +499,24 @@ function openComparison(relativeId) {
   else window.open(url, '_blank', 'noopener');
 }
 
+// Opens the relatedness matrix page for the selected profile. The page reads
+// the saved relatives and comparisons from IndexedDB.
+function openMatrix() {
+  if (!state.selectedId) return;
+
+  const profile = state.profiles.find((item) => item.id === state.selectedId);
+  const profileName = profile
+    ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.id
+    : state.selectedId;
+
+  const url = chrome.runtime.getURL('matrix.html')
+    + '?profile=' + encodeURIComponent(state.selectedId)
+    + '&profile_name=' + encodeURIComponent(profileName);
+
+  if (chrome.tabs && chrome.tabs.create) chrome.tabs.create({ url });
+  else window.open(url, '_blank', 'noopener');
+}
+
 // Deletes the whole local database after confirmation.
 async function deleteData() {
   if (state.clearing || state.transferring || state.relativesPhase === 'loading' || state.comparisonsRunning) return;
@@ -764,6 +782,12 @@ const App = {
               disabled: state.relatives.length === 0,
               onclick: state.comparisonsRunning ? stopComparisons : getRelativesInCommon,
             }, state.comparisonsRunning ? 'Stop' : 'Get relatives in common'),
+            m('button.secondary', {
+              type: 'button',
+              disabled: !state.selectedId,
+              title: 'Open the pairwise IBD matrix and shared-relative networks',
+              onclick: openMatrix,
+            }, 'View IBD matrix'),
             m('div.delay-field', [
               m('label.label', { for: 'requestDelay' }, 'Delay (seconds)'),
               m('input#requestDelay', {
