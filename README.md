@@ -36,8 +36,8 @@ pairwise IBD matrix and grouped by shared relatives.
 6. Click **IBD matrix** to open the matrix and shared-relative networks
    for the selected profile. See below for what the page shows.
 7. Click **Export** in the top-right toolbar to save everything in the local
-   database to a `.db` SQLite file.
-8. Click **Import** to load a `.db` file made by **Export**. This replaces the
+   database to a `.json` file.
+8. Click **Import** to load a `.json` file made by **Export**. This replaces the
    whole local database with the file's contents.
 9. Click **Delete** in the top-right toolbar to delete the whole local database
    (all saved relatives and relatives-in-common data) from this browser.
@@ -103,18 +103,15 @@ the selected profile but no relative-to-relative networks.
 - The shared cM in the main table is estimated from 23andMe's percentage
   (about 74.4 cM per percentage point); the segment count comes from the
   response.
-- **Export** writes a real SQLite database (`.db`) using
-  [sql.js](https://github.com/sql-js/sql.js). The tables are `metadata`,
-  `profiles`, `relatives`, `pairs`, and `relatives_in_common`. Every saved field
-  becomes its own column, with the field names discovered from the data; common
-  fields such as names, IBD proportions, and relationship ids are therefore easy
-  to query. Booleans are stored as `0` or `1`, and `row_position` keeps each list
-  in its original order. **Import** validates the whole file before replacing
-  both stores with its contents. It reads only databases made by **Export**, not
-  arbitrary SQLite files.
-- The database is built in memory while exporting, so a backup briefly needs
-  memory for the whole file.
-- SQLite support uses sql.js (MIT), vendored under `vendor/`.
+- **Export** writes a JSON file with the format name, version, export time,
+  and a `profiles` array. Each profile holds its saved `relatives` list and its
+  `pairs` list (relatives-in-common comparisons), with every returned field kept.
+- **Import** validates the JSON format, version, and every profile/pair in a
+  first streaming pass, then reads the file again and writes one profile at a
+  time. It reads only files made by **Export**.
+- **Export** streams the JSON to the save dialog when the browser provides a
+  file handle. If that API is unavailable, it falls back to a regular download
+  built in memory.
 - The UI uses Materialize CSS (MIT), vendored under `vendor/`, with a dark
   theme override in `styles/material-dark.css`.
 - The comparison is fetched once and then opened instantly.

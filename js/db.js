@@ -13,6 +13,7 @@
  */
 
 import Dexie from '../vendor/dexie.mjs';
+import { EXPORT_FORMAT, EXPORT_VERSION } from './reader.js';
 
 const DB_NAME = 'relatives-in-common';
 
@@ -110,88 +111,256 @@ export async function deleteDatabase() {
   db = createDb();
 }
 
-/* ---------- Export / import ---------- */
-
-export const EXPORT_FORMAT = 'relatives-in-common-database';
+/* ---------- JSON export / import ---------- */
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-// Yields the whole database as records, one at a time. The first record holds
-// the export metadata.
-export async function* exportDatabaseRecords() {
-  yield {
-    format: EXPORT_FORMAT,
-    exported_at: new Date().toISOString(),
-  };
-
-  const relativeKeys = await db.profile_relatives.toCollection().primaryKeys();
-  for (const profileId of relativeKeys) {
-    const record = await db.profile_relatives.get(profileId);
-    if (!record || !Array.isArray(record.relatives)) continue;
-
-    yield {
-      type: 'profile_relatives',
-      profile_id: String(record.profile_id),
-      relatives: record.relatives,
-    };
-  }
-
-  // One record per pair keeps each array small; the import groups pairs back
-  // into one record per profile.
-  const commonKeys = await db.relatives_in_common.toCollection().primaryKeys();
-  for (const profileId of commonKeys) {
-    const record = await db.relatives_in_common.get(profileId);
-    if (!record || !Array.isArray(record.pairs)) continue;
-
-    for (const pair of record.pairs) {
-      if (!isObject(pair) || !pair.relative_profile_id || !Array.isArray(pair.relatives)) continue;
-
-      yield {
-        type: 'pair',
-        profile_id: String(record.profile_id),
-        relative_profile_id: String(pair.relative_profile_id),
-        relatives: pair.relatives,
-      };
-    }
-  }
+function profileIdOf(value) {
+  return value === undefined || value === null ? '' : String(value).trim();
 }
 
-// Replaces both stores with records from a validated export. The export lists
-// all pairs for a profile together, so only one kept profile's pairs are held
-// in memory at a time.
-export async function replaceDatabaseFromRecords(records) {
-  await db.profile_relatives.clear();
-  await db.relatives_in_common.clear();
+// Returns a plain object with every saved profile, its relatives, and its
+// relatives-in-common pairs. Arrays are kept exactly as saved.
+export async function exportDatabaseJson() {
+  const [relativeRecords, commonRecords] = await Promise.all([
+    db.profile_relatives.toArray(),
+    db.relatives_in_common.toArray(),
+  ]);
 
-  let currentProfileId = null;
-  let pairs = [];
+  const byProfile = new Map();
 
-  for await (const record of records) {
-    if (record.type === 'profile_relatives') {
-      await db.profile_relatives.put({
-        profile_id: record.profile_id,
-        relatives: record.relatives,
-      });
-      continue;
+  function ensureProfile(profileId) {
+    if (!byProfile.has(profileId)) {
+      byProfile.set(profileId, { profile_id: profileId, relatives: [], pairs: [] });
+    }
+    return byProfile.get(profileId);
+  }
+
+  for (const record of relativeRecords) {
+    const profileId = profileIdOf(record && record.profile_id);
+    if (!profileId) continue;
+
+    const profile = ensureProfile(profileId);
+    if (Array.isArray(record.relatives)) profile.relatives = record.relatives;
+  }
+
+  for (const record of commonRecords) {
+    const profileId = profileIdOf(record && record.profile_id);
+    if (!profileId) continue;
+
+    const profile = ensureProfile(profileId);
+    if (Array.isArray(record.pairs)) profile.pairs = record.pairs;
+  }
+
+  const profiles = [...byProfile.values()].sort(
+    (a, b) => a.profile_id.localeCompare(b.profile_id),
+  );
+
+  return {
+    format: EXPORT_FORMAT,
+    version: EXPORT_VERSION,
+    exported_at: new Date().toISOString(),
+    profiles,
+  };
+}
+
+// Streams the same JSON shape to a writer without building the whole file in
+// memory. `write` receives a series of strings.
+export async function exportDatabaseJsonStream(write) {
+  if (typeof write !== 'function') {
+    throw new Error('a write function is required');
+  }
+
+  const [relativeKeys, commonKeys] = await Promise.all([
+    db.profile_relatives.toCollection().primaryKeys(),
+    db.relatives_in_common.toCollection().primaryKeys(),
+  ]);
+
+  const keys = [...new Set([...relativeKeys, ...commonKeys])];
+  keys.sort((a, b) => String(a).localeCompare(String(b)));
+
+  let profiles = 0;
+  let comparisons = 0;
+  let relativeRows = 0;
+
+  await write('{"format":' + JSON.stringify(EXPORT_FORMAT)
+    + ',"version":' + EXPORT_VERSION
+    + ',"exported_at":' + JSON.stringify(new Date().toISOString())
+    + ',"profiles":[');
+
+  let firstProfile = true;
+
+  for (const key of keys) {
+    const [relativeRecord, commonRecord] = await Promise.all([
+      db.profile_relatives.get(key),
+      db.relatives_in_common.get(key),
+    ]);
+
+    const relatives = relativeRecord && Array.isArray(relativeRecord.relatives)
+      ? relativeRecord.relatives
+      : [];
+    const pairs = commonRecord && Array.isArray(commonRecord.pairs)
+      ? commonRecord.pairs
+      : [];
+
+    if (!relativeRecord && !commonRecord) continue;
+
+    if (!firstProfile) await write(',');
+    firstProfile = false;
+
+    await write('{"profile_id":' + JSON.stringify(String(key)) + ',"relatives":[');
+
+    for (let index = 0; index < relatives.length; index++) {
+      if (index > 0) await write(',');
+      await write(JSON.stringify(relatives[index]));
     }
 
-    if (record.profile_id !== currentProfileId) {
-      if (currentProfileId !== null) {
-        await db.relatives_in_common.put({ profile_id: currentProfileId, pairs });
-      }
-      currentProfileId = record.profile_id;
-      pairs = [];
+    await write('],"pairs":[');
+
+    for (let index = 0; index < pairs.length; index++) {
+      if (index > 0) await write(',');
+      await write(JSON.stringify(pairs[index]));
     }
 
-    pairs.push({
-      relative_profile_id: record.relative_profile_id,
-      relatives: record.relatives,
+    await write(']}');
+
+    profiles++;
+    comparisons += pairs.length;
+    relativeRows += relatives.length;
+  }
+
+  await write(']}');
+
+  return { profiles, comparisons, relatives: relativeRows };
+}
+
+// Validates one profile from a parsed JSON export.
+export function validateJsonProfile(profile, profileIndex = 0) {
+  if (!isObject(profile)) {
+    throw new Error('profile ' + (profileIndex + 1) + ' is not an object');
+  }
+
+  const profileId = profileIdOf(profile.profile_id);
+  if (!profileId) {
+    throw new Error('profile ' + (profileIndex + 1) + ' has no profile_id');
+  }
+
+  const relatives = profile.relatives === undefined ? [] : profile.relatives;
+  if (!Array.isArray(relatives) || !relatives.every(isObject)) {
+    throw new Error('profile ' + profileId + ' has an invalid relatives list');
+  }
+
+  const pairs = profile.pairs === undefined ? [] : profile.pairs;
+  if (!Array.isArray(pairs)) {
+    throw new Error('profile ' + profileId + ' has an invalid pairs list');
+  }
+
+  const normalizedPairs = pairs.map((pair, pairIndex) => {
+    if (!isObject(pair)) {
+      throw new Error('profile ' + profileId + ' pair ' + (pairIndex + 1) + ' is not an object');
+    }
+
+    const relativeId = profileIdOf(pair.relative_profile_id);
+    if (!relativeId) {
+      throw new Error('profile ' + profileId + ' pair ' + (pairIndex + 1) + ' has no relative_profile_id');
+    }
+    if (!Array.isArray(pair.relatives) || !pair.relatives.every(isObject)) {
+      throw new Error('profile ' + profileId + ' pair ' + relativeId + ' has an invalid relatives list');
+    }
+
+    return { relative_profile_id: relativeId, relatives: pair.relatives };
+  });
+
+  return { profile_id: profileId, relatives, pairs: normalizedPairs };
+}
+
+// Validates a parsed JSON export before anything in IndexedDB is changed.
+export function validateJsonExport(data) {
+  if (!isObject(data)) {
+    throw new Error('the file does not contain a JSON object');
+  }
+  if (data.format !== EXPORT_FORMAT) {
+    throw new Error('this is not a Relatives in Common JSON export');
+  }
+  if (data.version !== EXPORT_VERSION) {
+    throw new Error('this JSON export uses an unsupported version');
+  }
+  if (!Array.isArray(data.profiles)) {
+    throw new Error('the export does not contain a profiles array');
+  }
+
+  const seen = new Set();
+  let comparisons = 0;
+  let relativeRows = 0;
+
+  const profiles = data.profiles.map((profile, profileIndex) => {
+    const normalized = validateJsonProfile(profile, profileIndex);
+    if (seen.has(normalized.profile_id)) {
+      throw new Error('profile_id ' + normalized.profile_id + ' appears more than once');
+    }
+    seen.add(normalized.profile_id);
+
+    comparisons += normalized.pairs.length;
+    relativeRows += normalized.relatives.length;
+    return normalized;
+  });
+
+  return {
+    profiles,
+    counts: {
+      profiles: profiles.length,
+      comparisons,
+      relatives: relativeRows,
+    },
+  };
+}
+
+// Clears both stores. Used by the streaming importer after the file has been
+// validated.
+export async function clearDatabaseData() {
+  await db.transaction('rw', db.profile_relatives, db.relatives_in_common, async () => {
+    await db.profile_relatives.clear();
+    await db.relatives_in_common.clear();
+  });
+}
+
+// Writes one validated profile from the streaming importer.
+export async function writeImportedProfile(profile) {
+  await db.transaction('rw', db.profile_relatives, db.relatives_in_common, async () => {
+    await db.profile_relatives.put({
+      profile_id: profile.profile_id,
+      relatives: profile.relatives,
     });
-  }
 
-  if (currentProfileId !== null) {
-    await db.relatives_in_common.put({ profile_id: currentProfileId, pairs });
-  }
+    await db.relatives_in_common.put({
+      profile_id: profile.profile_id,
+      pairs: profile.pairs,
+    });
+  });
+}
+
+// Replaces both stores with a validated JSON export.
+export async function importDatabaseJson(data) {
+  const { profiles, counts } = validateJsonExport(data);
+
+  await db.transaction('rw', db.profile_relatives, db.relatives_in_common, async () => {
+    await db.profile_relatives.clear();
+    await db.relatives_in_common.clear();
+
+    if (profiles.length > 0) {
+      await db.profile_relatives.bulkPut(profiles.map((profile) => ({
+        profile_id: profile.profile_id,
+        relatives: profile.relatives,
+      })));
+
+      await db.relatives_in_common.bulkPut(profiles.map((profile) => ({
+        profile_id: profile.profile_id,
+        pairs: profile.pairs,
+      })));
+    }
+  });
+
+  return counts;
 }

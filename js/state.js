@@ -18,7 +18,7 @@ export const mainState = {
   retryDelayMs: 60000,       // delay before retrying a failed request
   comparisonProgress: null,  // { total, done, remainingMs } while fetching
   clearing: false,
-  transferring: '',           // '' | export | import while a backup is read/written
+  transferring: '',           // '' | export | import while a transfer is read/written
   notice: '',
   noticeLink: '',          // optional URL shown as a link next to the notice
 };

@@ -21,10 +21,15 @@ import {
   saveRelativesInCommon,
   getProfileRelativesInCommon,
   deleteDatabase,
-  replaceDatabaseFromRecords,
+  exportDatabaseJson,
+  exportDatabaseJsonStream,
+  importDatabaseJson,
+  clearDatabaseData,
+  writeImportedProfile,
+  validateJsonProfile,
 } from './db.js';
+import { readJsonProfiles } from './reader.js';
 import { avatar, displayName, profileUrl } from './person.js';
-import { exportDatabaseFile, readDatabaseBackup } from './sqlite.js';
 import { appNav } from './ui.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
@@ -553,47 +558,37 @@ function exportFilename() {
   const pad = (value) => String(value).padStart(2, '0');
   return 'relatives-in-common-'
     + now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
-    + '.db';
+    + '.json';
 }
 
-// Saves the SQLite file, using a save dialog when the browser offers one and
-// falling back to a regular download.
-async function saveExport(bytes) {
-  let handle = null;
+// Opens a save dialog. Returns a handle, false when the picker is unavailable
+// (use a download fallback), or undefined when the user cancels.
+async function chooseExportHandle() {
+  if (typeof window.showSaveFilePicker !== 'function') return false;
 
-  if (typeof window.showSaveFilePicker === 'function') {
-    try {
-      handle = await window.showSaveFilePicker({
-        suggestedName: exportFilename(),
-        types: [{
-          description: 'SQLite database',
-          accept: { 'application/vnd.sqlite3': ['.db', '.sqlite'] },
-        }],
-      });
-    } catch (err) {
-      if (err && err.name === 'AbortError') return false;
+  try {
+    return await window.showSaveFilePicker({
+      suggestedName: exportFilename(),
+      types: [{
+        description: 'JSON file',
+        accept: { 'application/json': ['.json'] },
+      }],
+    });
+  } catch (err) {
+    if (err && err.name === 'AbortError') return undefined;
 
-      // The save dialog is not always usable from an extension page; fall back
-      // to a regular download instead of failing the export.
-      if (!err || (err.name !== 'NotAllowedError' && err.name !== 'SecurityError')) {
-        throw err;
-      }
+    // The save dialog is not always usable from an extension page; fall back
+    // to a regular download instead of failing the export.
+    if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+      return false;
     }
-  }
 
-  if (handle) {
-    const writable = await handle.createWritable();
-    try {
-      await writable.write(bytes);
-      await writable.close();
-    } catch (err) {
-      try { await writable.abort(); } catch { /* ignore */ }
-      throw err;
-    }
-    return true;
+    throw err;
   }
+}
 
-  const blob = new Blob([bytes], { type: 'application/vnd.sqlite3' });
+function saveExportDownload(text) {
+  const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
   const link = document.createElement('a');
@@ -606,8 +601,13 @@ async function saveExport(bytes) {
   return true;
 }
 
-// Writes the whole database to a SQLite file the user can keep, query, or move
-// to another browser.
+function setExportNotice(counts) {
+  state.notice = 'Exported ' + counts.profiles + ' profile(s) and '
+    + counts.comparisons + ' comparison(s).';
+}
+
+// Streams the JSON export to a file handle when possible. Without the File
+// System Access API it falls back to a normal download.
 async function exportData() {
   if (state.transferring) return;
 
@@ -615,14 +615,47 @@ async function exportData() {
   state.notice = '';
   m.redraw.sync();
 
-  const counts = { profiles: 0, comparisons: 0 };
-
   try {
-    const bytes = await exportDatabaseFile(counts);
-    const saved = await saveExport(bytes);
-    if (saved) {
-      state.notice = 'Exported ' + counts.profiles + ' profile(s) and '
-        + counts.comparisons + ' comparison(s).';
+    const handle = await chooseExportHandle();
+    if (handle === undefined) return;
+
+    if (handle) {
+      const writable = await handle.createWritable();
+      let counts;
+      let buffer = '';
+
+      async function flush() {
+        if (!buffer) return;
+        const chunk = buffer;
+        buffer = '';
+        await writable.write(chunk);
+      }
+
+      try {
+        counts = await exportDatabaseJsonStream(async (chunk) => {
+          buffer += chunk;
+          if (buffer.length >= 65536) await flush();
+        });
+        await flush();
+        await writable.close();
+      } catch (err) {
+        try { await writable.abort(); } catch { /* ignore */ }
+        throw err;
+      }
+
+      setExportNotice(counts);
+    } else {
+      const data = await exportDatabaseJson();
+      const counts = {
+        profiles: data.profiles.length,
+        comparisons: data.profiles.reduce(
+          (total, profile) => total + profile.pairs.length,
+          0,
+        ),
+      };
+
+      saveExportDownload(JSON.stringify(data));
+      setExportNotice(counts);
     }
   } catch (err) {
     state.notice = 'Could not export the database: ' + (err.message || err);
@@ -637,7 +670,7 @@ function chooseImportFile() {
 
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.db,.sqlite,.sqlite3,application/vnd.sqlite3,application/x-sqlite3';
+  input.accept = '.json,application/json';
   input.onchange = () => {
     const file = input.files && input.files[0];
     if (file) importData(file);
@@ -645,8 +678,8 @@ function chooseImportFile() {
   input.click();
 }
 
-// Reads a previously exported SQLite file back into the database, replacing
-// everything that is currently saved.
+// Streams a JSON export back into the database. The file is validated in a
+// first pass, then streamed again to write one profile at a time.
 async function importData(file) {
   const confirmed = window.confirm(
     'Import "' + file.name + '"?\n\n'
@@ -659,13 +692,51 @@ async function importData(file) {
   state.notice = '';
   m.redraw.sync();
 
-  let backup = null;
-
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    backup = await readDatabaseBackup(bytes);
+    let counts;
 
-    await replaceDatabaseFromRecords(backup.records());
+    if (typeof file.stream === 'function') {
+      let profiles = 0;
+      let comparisons = 0;
+      let relatives = 0;
+      const seen = new Set();
+
+      // Validation pass: nothing is written until the whole file is valid.
+      for await (const rawProfile of readJsonProfiles(file)) {
+        const profile = validateJsonProfile(rawProfile, profiles);
+        if (seen.has(profile.profile_id)) {
+          throw new Error('profile_id ' + profile.profile_id + ' appears more than once');
+        }
+        seen.add(profile.profile_id);
+
+        profiles++;
+        comparisons += profile.pairs.length;
+        relatives += profile.relatives.length;
+      }
+
+      await clearDatabaseData();
+
+      // Write pass: stream the file again, one profile at a time.
+      let written = 0;
+      for await (const rawProfile of readJsonProfiles(file)) {
+        const profile = validateJsonProfile(rawProfile, written);
+        written++;
+        await writeImportedProfile(profile);
+      }
+
+      counts = { profiles, comparisons, relatives };
+    } else {
+      const text = await file.text();
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error('the file is not valid JSON');
+      }
+
+      counts = await importDatabaseJson(data);
+    }
 
     // Reload the selected profile's saved markers so imported comparisons show
     // up as Open right away.
@@ -673,12 +744,11 @@ async function importData(file) {
       await restoreSavedComparisons(state.selectedId, relativesSeq);
     }
 
-    state.notice = 'Imported ' + backup.profiles + ' profile(s) and '
-      + backup.comparisons + ' comparison(s).';
+    state.notice = 'Imported ' + counts.profiles + ' profile(s) and '
+      + counts.comparisons + ' comparison(s).';
   } catch (err) {
     state.notice = 'Could not import the file: ' + (err.message || err);
   } finally {
-    if (backup) backup.close();
     state.transferring = '';
     m.redraw.sync();
   }
@@ -746,14 +816,14 @@ const App = {
         actions: [
           m('button.btn-flat.waves-effect', {
             type: 'button',
-            title: 'Download the saved database as a SQLite .db file',
+            title: 'Download the saved database as a JSON file',
             disabled: state.transferring || state.clearing
               || state.relativesPhase === 'loading' || state.comparisonsRunning,
             onclick: exportData,
           }, state.transferring === 'export' ? 'Exporting…' : 'Export'),
           m('button.btn-flat.waves-effect', {
             type: 'button',
-            title: 'Load a previously exported SQLite .db file',
+            title: 'Load a previously exported JSON file',
             disabled: state.transferring || state.clearing
               || state.relativesPhase === 'loading' || state.comparisonsRunning,
             onclick: chooseImportFile,
