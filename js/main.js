@@ -556,9 +556,10 @@ async function deleteData() {
 function exportFilename() {
   const now = new Date();
   const pad = (value) => String(value).padStart(2, '0');
-  return 'relatives-in-common-'
-    + now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
-    + '.json';
+  const stamp = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+    + '_' + pad(now.getHours()) + '-' + pad(now.getMinutes()) + '-' + pad(now.getSeconds());
+
+  return 'relatives-in-common-' + stamp + '.json';
 }
 
 // Opens a save dialog. Returns a handle, false when the picker is unavailable
@@ -816,7 +817,7 @@ const App = {
         actions: [
           m('button.btn-flat.waves-effect', {
             type: 'button',
-            title: 'Download the saved database as a JSON file',
+            title: 'Download all saved data as a JSON file',
             disabled: state.transferring || state.clearing
               || state.relativesPhase === 'loading' || state.comparisonsRunning,
             onclick: exportData,

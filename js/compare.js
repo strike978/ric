@@ -169,7 +169,7 @@ const App = {
         actions: [
           m('a.btn-flat.waves-effect', {
             href: pageUrl('index.html'),
-          }, 'Main page'),
+          }, 'Back to relatives'),
         ],
       }),
 
