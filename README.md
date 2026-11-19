@@ -51,6 +51,8 @@ pair. For each relative in common it shows:
 ## Notes
 
 - This is a proof of concept.
+- The **Hide names** toggle in the header replaces relative names with initials
+  everywhere. The setting is stored locally and applies on both pages.
 - Picking a profile fetches its DNA relatives, and comparisons are fetched for
   all of them.
 - Loading relatives also saves them to IndexedDB (via Dexie, in the

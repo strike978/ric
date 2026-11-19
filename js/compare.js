@@ -7,9 +7,10 @@
 
 import { compareState as state } from './state.js';
 import { getRelativesInCommon, getSavedRelatives } from './db.js';
-import { avatar, displayName, profileUrl } from './person.js';
+import { avatar, profileUrl } from './person.js';
 import { formatRelationship } from './relationships.js';
-import { appNav, pageUrl } from './ui.js';
+import { labelName, preferences, initialsOfName } from './preferences.js';
+import { appHeader, pageUrl } from './header.js';
 
 const params = new URLSearchParams(location.search);
 const profileId = params.get('profile') || '';
@@ -101,7 +102,6 @@ function sortedRelatives(relatives, sort) {
 async function load() {
   if (profileName && relativeName) {
     state.subtitle = profileName + ' → ' + relativeName;
-    document.title = 'Relatives in Common — ' + profileName + ' → ' + relativeName;
   } else {
     state.subtitle = '';
   }
@@ -169,11 +169,19 @@ const App = {
     const columns = relationshipIndexes(state.relatives);
     const rows = sortedRelatives(state.relatives, state.sort);
     const options = sortOptions(columns);
+    const subtitle = profileName && relativeName
+      ? profileName + ' → '
+        + (preferences.hideNames ? initialsOfName(relativeName) : relativeName)
+      : state.subtitle;
+
+    if (subtitle) {
+      document.title = 'Relatives in Common — ' + subtitle;
+    }
 
     return [
-      appNav({
+      appHeader({
         title: 'Relatives in Common',
-        subtitle: state.subtitle,
+        subtitle,
         actions: [
           m('a.btn-flat.waves-effect', {
             href: pageUrl('index.html'),
@@ -212,7 +220,7 @@ const App = {
                   const personUrl = profileUrl(profileId, relative.profile_id);
                   const person = [
                     avatar(relative),
-                    m('span.relative-name', displayName(relative)),
+                    m('span.relative-name', labelName(relative)),
                   ];
 
                   return m('tr', [

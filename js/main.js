@@ -30,7 +30,8 @@ import {
 } from './db.js';
 import { readJsonProfiles } from './reader.js';
 import { avatar, displayName, profileUrl } from './person.js';
-import { appNav } from './ui.js';
+import { labelName } from './preferences.js';
+import { appHeader, dataMenu } from './header.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
 
@@ -794,30 +795,19 @@ const App = {
       : '';
 
     return [
-      appNav({
+      appHeader({
         title: 'Relatives in Common',
         actions: [
-          m('button.btn-flat.waves-effect', {
-            type: 'button',
-            title: 'Download all saved data as a JSON file',
-            disabled: state.transferring || state.clearing
+          dataMenu({
+            busy: state.transferring || state.clearing
               || state.relativesPhase === 'loading' || state.comparisonsRunning,
-            onclick: exportData,
-          }, state.transferring === 'export' ? 'Exporting…' : 'Export'),
-          m('button.btn-flat.waves-effect', {
-            type: 'button',
-            title: 'Load a previously exported JSON file',
-            disabled: state.transferring || state.clearing
-              || state.relativesPhase === 'loading' || state.comparisonsRunning,
-            onclick: chooseImportFile,
-          }, state.transferring === 'import' ? 'Importing…' : 'Import'),
-          m('button.btn-flat.waves-effect.red-text', {
-            type: 'button',
-            title: 'Delete the entire local database',
-            disabled: state.clearing || state.transferring
-              || state.relativesPhase === 'loading' || state.comparisonsRunning,
-            onclick: deleteData,
-          }, state.clearing ? 'Deleting…' : 'Delete'),
+            exporting: state.transferring === 'export',
+            importing: state.transferring === 'import',
+            deleting: state.clearing,
+            onExport: exportData,
+            onImport: chooseImportFile,
+            onDelete: deleteData,
+          }),
         ],
       }),
 
@@ -913,7 +903,7 @@ const App = {
                       const personUrl = profileUrl(state.selectedId, relative.relative_profile_id);
                       const person = [
                         avatar(relative),
-                        m('span.relative-name', displayName(relative)),
+                        m('span.relative-name', labelName(relative)),
                       ];
 
                       return m('tr', { key: relative.relative_profile_id || index }, [

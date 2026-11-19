@@ -14,7 +14,7 @@ export function displayName(person) {
   return name || person.initials || '—';
 }
 
-function initialsOf(person) {
+export function initialsOf(person) {
   if (person.initials) return String(person.initials).trim().slice(0, 3).toUpperCase();
 
   const first = person.first_initial || String(person.first_name || '').trim().charAt(0);
