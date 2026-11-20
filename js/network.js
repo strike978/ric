@@ -181,7 +181,7 @@ function ownerIndexForMatch(rows, fallback) {
   return fallback;
 }
 
-function buildGraph(relatives, pairs, scope = 'linked') {
+function buildGraph(relatives, pairs, includeSharedMatches = true) {
   const nodes = [];
   const byId = new Map();
 
@@ -336,9 +336,9 @@ function buildGraph(relatives, pairs, scope = 'linked') {
 
   const includedMatches = [];
 
-  if (scope !== 'relatives') {
+  if (includeSharedMatches) {
     for (const stat of matchStats.values()) {
-      if (scope === 'linked' && stat.pairIds.size < 2) continue;
+      if (stat.pairIds.size < 2) continue;
 
       const matchOwnerIndex = ownerIndexForMatch(stat.rows, globalOwnerIndex);
       const entries = [];
@@ -461,8 +461,6 @@ function buildGraph(relatives, pairs, scope = 'linked') {
   );
 
   const sharedEdges = edges.filter((edge) => edge.kind === 'shared');
-  const linkedMatches = [...matchStats.values()]
-    .filter((stat) => stat.pairIds.size >= 2).length;
 
   nodeById = byId;
   state.owner = owner;
@@ -473,8 +471,6 @@ function buildGraph(relatives, pairs, scope = 'linked') {
   state.stats = {
     relatives: savedRelativeNodes.length,
     matches: includedMatches.length,
-    matchTotal: matchStats.size,
-    linkedMatches,
     connections: edges.length,
     shared: sharedEdges.length,
     confirmed: sharedEdges.filter((edge) => edge.confirmed).length,
@@ -584,22 +580,6 @@ function startSimulation(fresh = true) {
   view.running = true;
   cancelAnimationFrame(view.raf);
   view.raf = requestAnimationFrame(simulationFrame);
-}
-
-function reheat() {
-  if (state.nodes.length <= 1) return;
-
-  for (const node of state.nodes) {
-    if (node.kind === 'relative') {
-      node.pinned = false;
-      node.vx = 0;
-      node.vy = 0;
-      node.x += (Math.random() - 0.5) * 6;
-      node.y += (Math.random() - 0.5) * 6;
-    }
-  }
-
-  startSimulation(false);
 }
 
 function edgeIdealLength(edge) {
@@ -779,10 +759,9 @@ function zoomBy(factor) {
 }
 
 // Overview shows the strongest shared links; hovering or selecting a node adds
-// all of that node's links. "All links" shows the full graph.
+// all of that node's links.
 function edgeIsVisible(edge, focus) {
   if (edge.kind === 'owner') return true;
-  if (state.showAllLinks) return true;
   if (focus && (edge.source === focus || edge.target === focus)) return true;
   return featuredEdges.has(edge.id);
 }
@@ -1085,12 +1064,10 @@ function selectNode(node, center = false) {
   draw();
 }
 
-function changeScope(scope) {
-  if (state.scope === scope) return;
-
-  state.scope = scope;
+function toggleSharedMatches() {
+  state.includeSharedMatches = !state.includeSharedMatches;
   state.selectedId = '';
-  buildGraph(rawData.relatives, rawData.pairs, scope);
+  buildGraph(rawData.relatives, rawData.pairs, state.includeSharedMatches);
   hideTooltip();
   m.redraw.sync();
   startSimulation();
@@ -1324,7 +1301,7 @@ async function loadNetwork() {
     ]);
 
     rawData = { relatives, pairs };
-    buildGraph(relatives, pairs, state.scope);
+    buildGraph(relatives, pairs, state.includeSharedMatches);
     if (initialRelativeId && nodeById.has(initialRelativeId)) {
       state.selectedId = initialRelativeId;
     }
@@ -1427,17 +1404,12 @@ function overviewPanel() {
     state.stats.shared === 0 && state.stats.relatives > 0
       ? m('p.network-help.network-hint-block', 'No links between relatives yet. Use Start on the relatives page to add them.')
       : null,
-    state.scope === 'linked' && state.stats.matches === 0 && state.stats.matchTotal > 0
-      ? m('p.network-help.network-hint-block', 'No shared match connects more than one relative. Choose Relatives + all matches to include single-link matches.')
+    state.includeSharedMatches && state.stats.matches === 0 && state.stats.shared > 0
+      ? m('p.network-help', 'No shared match connects more than one relative.')
       : null,
-    state.scope === 'linked' && state.stats.matchTotal > state.stats.linkedMatches
-      ? m('p.network-help', (state.stats.matchTotal - state.stats.linkedMatches)
-        + ' single-link ' + (state.stats.matchTotal - state.stats.linkedMatches === 1 ? 'match is' : 'matches are')
-        + ' hidden. Choose Relatives + all matches to include them.')
-      : null,
-    state.stats.shared > 0 && !state.showAllLinks
+    state.stats.shared > 0
       ? m('p.network-help', 'Showing the ' + featuredEdges.size
-        + ' strongest shared links. Hover a relative for all of its links, or use All links.')
+        + ' strongest shared links. Hover a relative to see all of its links.')
       : null,
     top.length
       ? [
@@ -1555,22 +1527,15 @@ const App = {
               m('span.network-hint', 'Drag to pan · scroll to zoom · hover for links'),
             ]),
             m('div.network-tools', [
-              m('label.network-scope', [
-                m('span', 'Show'),
-                m('select.browser-default', {
-                  value: state.scope,
-                  title: 'Linked matches are shared matches seen under at least two relatives.',
-                  onchange: (event) => changeScope(event.target.value),
-                }, [
-                  m('option', { value: 'relatives', selected: state.scope === 'relatives' }, 'Relatives only'),
-                  m('option', { value: 'linked', selected: state.scope === 'linked' }, 'Relatives + linked matches'),
-                  m('option', { value: 'all', selected: state.scope === 'all' }, 'Relatives + all matches'),
-                ]),
-              ]),
-              m('button.btn-flat.btn-small.waves-effect', {
+              m('button', {
                 type: 'button',
-                onclick: reheat,
-              }, 'Re-layout'),
+                class: state.includeSharedMatches
+                  ? 'btn-flat btn-small waves-effect active'
+                  : 'btn-flat btn-small waves-effect',
+                'aria-pressed': state.includeSharedMatches ? 'true' : 'false',
+                title: 'Include shared matches seen under at least two relatives',
+                onclick: toggleSharedMatches,
+              }, 'Shared matches'),
               m('button.btn-flat.btn-small.waves-effect', {
                 type: 'button',
                 onclick: fitView,
@@ -1587,19 +1552,6 @@ const App = {
                 'aria-label': 'Zoom in',
                 onclick: () => zoomBy(1.3),
               }, '+'),
-              m('button', {
-                type: 'button',
-                class: state.showAllLinks
-                  ? 'btn-flat btn-small waves-effect active'
-                  : 'btn-flat btn-small waves-effect',
-                'aria-pressed': state.showAllLinks ? 'true' : 'false',
-                title: 'Show every shared link instead of only the strongest ones',
-                onclick: () => {
-                  state.showAllLinks = !state.showAllLinks;
-                  m.redraw.sync();
-                  draw();
-                },
-              }, 'All links'),
               m('button', {
                 type: 'button',
                 class: state.labels ? 'btn-flat btn-small waves-effect active' : 'btn-flat btn-small waves-effect',

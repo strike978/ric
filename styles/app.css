@@ -971,28 +971,6 @@ main.container.network-container {
   line-height: 30px;
 }
 
-.network-scope {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-}
-
-.network-scope > span {
-  color: var(--md-dim);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.network-scope select.browser-default {
-  width: auto;
-  height: 32px;
-  padding: 0 26px 0 8px;
-  font-size: 12px;
-}
-
 .network-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;

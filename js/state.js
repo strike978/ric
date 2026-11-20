@@ -47,8 +47,6 @@ export const networkState = {
   stats: {
     relatives: 0,
     matches: 0,
-    matchTotal: 0,
-    linkedMatches: 0,
     connections: 0,
     shared: 0,
     confirmed: 0,
@@ -56,7 +54,6 @@ export const networkState = {
   },
   selectedId: '',          // node id, or '' for the overview
   labels: true,            // draw names next to nodes
-  showAllLinks: false,     // false = strongest shared links + hovered node only
-  scope: 'linked',         // relatives | linked | all
+  includeSharedMatches: true, // shared matches seen under 2+ relatives
 };
 

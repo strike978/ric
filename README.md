@@ -37,19 +37,15 @@ one's relatives-in-common list.
    profile again reloads its relatives.
 6. Click **Open** to see the relatives in common for that pair.
 7. Click **Shared DNA** in the top-right toolbar to open the **Shared DNA
-   Network**. Use the **Show** selector to choose what to include:
-   - **Relatives only** — the profile and its saved direct relatives.
-   - **Relatives + linked matches** — also include shared matches that appear in
-     at least two relatives' lists (the default).
-   - **Relatives + all matches** — include every shared match, including ones
-     seen under only one relative.
+   Network**. **Shared matches** is on by default; it adds matches seen under at
+   least two relatives. Turn it off to show only direct relatives.
 
    The profile sits in the middle; blue edges show each relative's direct
    sharing with the profile. Dashed purple edges are links seen from both
    directions; dotted purple edges are only seen from one direction. Drag to
    pan, scroll to zoom, drag a node to pin it, and click a node to see its
    connections in the side panel. By default only the strongest shared links are
-   drawn; hover a relative or click **All links** to see the rest.
+   drawn; hover or click a relative to see all of its connections.
 8. Click **Data → Export JSON** in the top-right toolbar to save everything in
    the local database to a `.json` file.
 9. Click **Data → Import JSON** to load a `.json` file made by **Export**. This
@@ -94,10 +90,9 @@ pair. For each relative in common it shows:
   across the lists it appears in, falling back to the column order learned from
   saved relatives. When both directions are available their weights are
   averaged and the link is dashed/confirmed; otherwise it is dotted and marked
-  one-sided. **Relatives + linked matches** only includes matches shared by at
-  least two relatives; **Relatives + all matches** includes the rest. The
-  overview draws the 16 strongest shared links; hovering a node or enabling
-  **All links** reveals the rest.
+  one-sided. **Shared matches** adds only matches seen under at least two
+  relatives. The overview draws the 16 strongest shared links; hovering or
+  selecting a node reveals all of its links.
 - Segment counts are displayed in the tables and details, but they are not used
   as edge weights.
 - Node distance from the center reflects direct sharing with the profile
