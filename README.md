@@ -63,6 +63,17 @@ pair. For each relative in common it shows:
 - every predicted relationship and IBD percentage returned (usually two)
 - sortable by saved order or any available IBD percentage
 
+## Project layout
+
+- `js/pages/` — one module per page (`main`, `compare`, `network`)
+- `js/data/` — IndexedDB, profile extraction, and import/export helpers
+- `js/core/` — shared state, people, formatting, preferences, and DNA helpers
+- `js/ui/` — the shared header component
+- `js/background.js` — extension service worker
+- `styles/app.css` — theme, layout, and component styles
+- `vendor/` — Materialize, Mithril, and Dexie
+- `icons/` — extension icons
+
 ## Notes
 
 - This is a proof of concept.

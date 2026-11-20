@@ -5,7 +5,7 @@
  * hide-names switch, and optional right-side actions.
  */
 
-import { preferences, setHideNames } from './preferences.js';
+import { preferences, setHideNames } from '../core/preferences.js';
 
 export function pageUrl(name) {
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {

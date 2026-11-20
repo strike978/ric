@@ -12,7 +12,7 @@
  * The database is a development cache with a single schema version.
  */
 
-import Dexie from '../vendor/dexie.mjs';
+import Dexie from '../../vendor/dexie.mjs';
 import { EXPORT_FORMAT, EXPORT_VERSION } from './reader.js';
 
 const DB_NAME = 'relatives-in-common';

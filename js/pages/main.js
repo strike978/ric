@@ -14,8 +14,8 @@
  *    can render them.
  */
 
-import { mainState as state } from './state.js';
-import { extractProfiles } from './profiles.js';
+import { mainState as state } from '../core/state.js';
+import { extractProfiles } from '../data/profiles.js';
 import {
   saveRelatives,
   saveRelativesInCommon,
@@ -28,12 +28,12 @@ import {
   clearDatabaseData,
   writeImportedProfile,
   validateJsonProfile,
-} from './db.js';
-import { readJsonProfiles } from './reader.js';
-import { avatar, displayName, profileUrl } from './person.js';
-import { sharedDnaLabel } from './dna.js';
-import { labelName } from './preferences.js';
-import { appHeader, dataMenu, pageUrl } from './header.js';
+} from '../data/db.js';
+import { readJsonProfiles } from '../data/reader.js';
+import { avatar, displayName, profileUrl } from '../core/person.js';
+import { sharedDnaLabel } from '../core/dna.js';
+import { labelName } from '../core/preferences.js';
+import { appHeader, dataMenu, pageUrl } from '../ui/header.js';
 
 const TARGET_URL = 'https://you.23andme.com/';
 

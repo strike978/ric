@@ -12,13 +12,13 @@
  * it stays usable with hundreds of nodes and does not need a charting library.
  */
 
-import { networkState as state } from './state.js';
-import { getProfileRelativesInCommon, getSavedRelatives } from './db.js';
-import { initialsOf, profileUrl } from './person.js';
-import { cmFromProportion, numberValue } from './dna.js';
-import { formatRelationship } from './relationships.js';
-import { initialsOfName, labelName, preferences } from './preferences.js';
-import { appHeader, pageUrl } from './header.js';
+import { networkState as state } from '../core/state.js';
+import { getProfileRelativesInCommon, getSavedRelatives } from '../data/db.js';
+import { initialsOf, profileUrl } from '../core/person.js';
+import { cmFromProportion, numberValue } from '../core/dna.js';
+import { formatRelationship } from '../core/relationships.js';
+import { initialsOfName, labelName, preferences } from '../core/preferences.js';
+import { appHeader, pageUrl } from '../ui/header.js';
 
 const OWNER_ID = '__owner__';
 const TAU = Math.PI * 2;

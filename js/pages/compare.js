@@ -5,12 +5,12 @@
  * it to IndexedDB, so this page only reads the database.
  */
 
-import { compareState as state } from './state.js';
-import { getRelativesInCommon, getSavedRelatives } from './db.js';
-import { avatar, profileUrl } from './person.js';
-import { formatRelationship } from './relationships.js';
-import { labelName, preferences, initialsOfName } from './preferences.js';
-import { appHeader, pageUrl } from './header.js';
+import { compareState as state } from '../core/state.js';
+import { getRelativesInCommon, getSavedRelatives } from '../data/db.js';
+import { avatar, profileUrl } from '../core/person.js';
+import { formatRelationship } from '../core/relationships.js';
+import { labelName, preferences, initialsOfName } from '../core/preferences.js';
+import { appHeader, pageUrl } from '../ui/header.js';
 
 const params = new URLSearchParams(location.search);
 const profileId = params.get('profile') || '';
