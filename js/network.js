@@ -82,41 +82,30 @@ function ibdIndices(row) {
   return indices;
 }
 
-// A common-match row usually carries two relationship/IBD contexts. One
-// describes the match against the profile; the other against the compared
-// relative. Use the match's own saved relationship and direct proportion to
-// identify the profile-side column. Returns that index, or null when the row
-// cannot be trusted.
+// A common-match row usually carries two IBD contexts. One describes the match
+// against the profile; the other against the compared relative. Use the
+// match's own saved direct proportion to identify the profile-side column.
+// Returns that index, or null when the row cannot be trusted.
 function ownerIndexEvidence(row, ownerPerson) {
   const indices = ibdIndices(row);
   if (indices.length < 2) return null;
 
-  const ownerRelationship = ownerPerson && ownerPerson.predicted_relationship_id;
   const ownerProportion = numberValue(ownerPerson && ownerPerson.ibd_proportion);
+  if (ownerProportion === null) return null;
 
-  if (ownerRelationship) {
-    const matches = indices.filter(
-      (index) => row['predicted_relationship_id_' + index] === ownerRelationship,
-    );
-    if (matches.length === 1) return matches[0];
-  }
+  const tolerance = Math.max(0.0025, Math.abs(ownerProportion) * 0.02);
+  let closest = null;
+  for (const index of indices) {
+    const value = numberValue(row['ibd_proportion_' + index]);
+    if (value === null) continue;
 
-  if (ownerProportion !== null) {
-    const tolerance = Math.max(0.0025, Math.abs(ownerProportion) * 0.02);
-    let closest = null;
-    for (const index of indices) {
-      const value = numberValue(row['ibd_proportion_' + index]);
-      if (value === null) continue;
-
-      const distance = Math.abs(value - ownerProportion);
-      if (!closest || distance < closest.distance) {
-        closest = { index, distance };
-      }
+    const distance = Math.abs(value - ownerProportion);
+    if (!closest || distance < closest.distance) {
+      closest = { index, distance };
     }
-    if (closest && closest.distance <= tolerance) return closest.index;
   }
 
-  return null;
+  return closest && closest.distance <= tolerance ? closest.index : null;
 }
 
 // With the profile-side column known, return the other context.
@@ -1403,9 +1392,6 @@ function overviewPanel() {
       : null,
     state.stats.shared === 0 && state.stats.relatives > 0
       ? m('p.network-help.network-hint-block', 'No links between relatives yet. Use Start on the relatives page to add them.')
-      : null,
-    state.includeSharedMatches && state.stats.matches === 0 && state.stats.shared > 0
-      ? m('p.network-help', 'No shared match connects more than one relative.')
       : null,
     state.stats.shared > 0
       ? m('p.network-help', 'Showing the ' + featuredEdges.size

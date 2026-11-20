@@ -82,10 +82,11 @@ pair. For each relative in common it shows:
 - The comparison page reads its data from IndexedDB.
 - The shared DNA network page also reads IndexedDB. A link is drawn when one person
   appears in the other's relatives-in-common list. The row carries two
-  relationship/IBD contexts; the common match's own saved relationship and
-  direct proportion identify the profile-side context, and the other context
-  becomes the edge weight. If the profile-side context cannot be identified,
-  that row is skipped. For a common match that is not a saved relative, the
+  relationship/IBD contexts; the common match's own saved direct proportion
+  identifies the profile-side context, and the other context becomes the edge
+  weight. If the profile-side context cannot be identified, that row is skipped.
+  Relationship labels and segment counts are shown in the UI but are not used
+  for the graph math. For a common match that is not a saved relative, the
   profile-side column is chosen from how consistent that match's proportions are
   across the lists it appears in, falling back to the column order learned from
   saved relatives. When both directions are available their weights are
