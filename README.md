@@ -97,7 +97,9 @@ pair. For each relative in common it shows:
 - Segment counts are displayed in the tables and details, but they are not used
   as edge weights.
 - Node distance from the center reflects direct sharing with the profile
-  (stronger sharing is closer). The force layout makes exact edge lengths
+  (stronger sharing is closer) on a logarithmic scale, so each doubling of
+  sharing moves a node a similar amount. Links between relatives get shorter as
+  their shared proportion grows. The force layout makes exact edge lengths
   approximate; they are not phylogenetic branch lengths.
 - The only value stored in `localStorage` is the hide-names preference.
 - **Clear profile data** removes only the selected profile's records from both

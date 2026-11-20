@@ -64,11 +64,20 @@ function radiusFor(ibd) {
   return 6.5 + strength * 9.5;
 }
 
-// Preferred distance from the profile, based on direct sharing.
+// Preferred distance from the profile, based on direct sharing. The scale is
+// logarithmic because each relationship step roughly halves IBD, so doubles of
+// sharing should move a node by a similar amount.
 function targetRadius(ibd) {
-  const value = numberValue(ibd) ?? 0;
-  const strength = Math.sqrt(Math.min(value / 0.5, 1));
-  return 150 + 250 * (1 - strength);
+  const value = Math.max(numberValue(ibd) ?? 0, 0);
+  const strength = Math.log10(1 + value / 0.001) / Math.log10(1 + 0.5 / 0.001);
+  return 150 + 250 * (1 - Math.min(strength, 1));
+}
+
+// Normalised 0..1 sharing strength. Peer links use a lower cap so that the
+// small proportions usually seen between relatives-in-common still spread out.
+function shareStrength(value, max) {
+  const number = numberValue(value) ?? 0;
+  return Math.sqrt(Math.min(number / max, 1));
 }
 
 // Every IBD column the row carries, e.g. [1, 2].
@@ -396,7 +405,7 @@ function buildGraph(relatives, pairs, includeSharedMatches = true) {
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   positioned.forEach((node, index) => {
     const angle = index * goldenAngle;
-    const radius = targetRadius(node.ibd) + (node.kind === 'match' ? 26 : 0);
+    const radius = targetRadius(node.ibd);
     node.x = Math.cos(angle) * radius;
     node.y = Math.sin(angle) * radius;
   });
@@ -572,16 +581,17 @@ function startSimulation(fresh = true) {
 }
 
 function edgeIdealLength(edge) {
-  const strength = Math.sqrt(Math.min(edge.weight / 0.5, 1));
-  return edge.kind === 'owner'
-    ? targetRadius(edge.weight)
-    : 90 + 210 * (1 - strength);
+  return 90 + 210 * (1 - shareStrength(edge.weight, 0.15));
 }
 
 function applySprings() {
   const alpha = view.alpha;
 
   for (const edge of state.edges) {
+    // Direct sharing with the profile is handled by the radial force, so every
+    // node type is positioned by the same rule.
+    if (edge.kind === 'owner') continue;
+
     const a = edge.source;
     const b = edge.target;
     let dx = b.x - a.x;
@@ -594,8 +604,8 @@ function applySprings() {
     }
 
     const ideal = edgeIdealLength(edge);
-    const spring = (edge.kind === 'owner' ? 0.014 : 0.03)
-      * (0.4 + Math.min(edge.weight / 0.5, 1))
+    const spring = 0.03
+      * (0.45 + shareStrength(edge.weight, 0.15))
       * alpha;
     const force = (distance - ideal) * spring;
     const fx = (dx / distance) * force;
@@ -656,10 +666,11 @@ function applyRepulsion() {
 
 function applyRadial() {
   for (const node of state.nodes) {
-    if (node.kind !== 'relative' || node.pinned) continue;
+    if (node.kind === 'owner' || node.pinned) continue;
 
     const distance = Math.sqrt(node.x * node.x + node.y * node.y) || 1;
-    const pull = (targetRadius(node.ibd) - distance) * 0.0022 * view.alpha;
+    const target = targetRadius(node.ibd);
+    const pull = (target - distance) * 0.008 * view.alpha;
     node.vx += (node.x / distance) * pull;
     node.vy += (node.y / distance) * pull;
   }
@@ -1381,7 +1392,7 @@ function overviewPanel() {
       ]),
     ]),
     m('p.network-help', 'Drag to pan, scroll to zoom, and click a node for details. Drag a node to pin it.'),
-    m('p.network-help', 'Distance from the center follows direct sharing with the profile; edge lengths are approximate.'),
+    m('p.network-help', 'Distance from the center follows direct sharing with the profile on a log scale; shared links shorten as relatives share more DNA with each other.'),
     state.stats.shared > 0
       ? m('p.network-help', state.stats.shared + ' shared '
         + (state.stats.shared === 1 ? 'link' : 'links')
