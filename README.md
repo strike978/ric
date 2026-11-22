@@ -21,7 +21,9 @@ one's relatives-in-common list.
 3. Pick a profile from the menu. That profile's DNA relatives load right away
    with a spinner in the table. Each row shows the relative's avatar and name,
    plus the estimated shared cM and number of segments. Click the avatar or
-   name to open the relative's profile on 23andMe.
+   name to open the relative's profile on 23andMe. If you have loaded this
+   profile before, any newly added relatives are fetched automatically and
+   added to the saved comparisons of the people they match.
 4. Click **Start** to load comparisons for the loaded
    relatives. The **Delay (seconds)** and **Retry delay (seconds)** fields set
    the gap between requests (default 3 seconds) and the wait after a failure
@@ -69,8 +71,18 @@ pair. For each relative in common it shows:
 - The **Hide names** toggle in the header replaces relative names with initials
   everywhere, including the shared DNA network. The setting is stored locally and
   applies on every page.
-- Picking a profile fetches its DNA relatives, and comparisons are fetched for
-  all of them.
+- Picking a profile fetches its DNA relatives. On later loads, relatives that
+  were not in the previous list are fetched automatically, using the same
+  delay, retry, and Stop behavior as **Start**.
+- After a comparison is fetched, each match that is also a saved relative and
+  already has a saved comparison gets the fetched relative added to its table.
+  Copied rows are marked `derived`; the network ignores them when deciding
+  whether a link was seen from both directions, because the fetched relative's
+  own pair already supplies that connection.
+- Relatives that disappear from 23andMe keep their saved comparisons. They are
+  not deleted, so they remain in exports and are ready if the relative returns.
+  While missing they do not appear in the current list or network, because
+  those show the relatives the endpoint currently returns.
 - Loading relatives also saves them to IndexedDB (via Dexie, in the
   `relatives-in-common` database): one record in `profile_relatives` per
   selected profile, keyed by its profile id, holding its relatives with every

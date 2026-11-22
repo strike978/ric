@@ -7,7 +7,8 @@
  *
  * The `relatives_in_common` store has one record per profile too, holding a
  * `pairs` array: one item per compared relative, with that pair's common
- * relatives in `relatives`.
+ * relatives in `relatives`. Rows copied in from another relative's fetch carry
+ * `derived: true`; the network ignores them when counting confirmations.
  *
  * The database is a development cache with a single schema version.
  */
@@ -73,6 +74,43 @@ export async function saveRelativesInCommon(profileId, relativeId, relatives) {
 
     others.push({ relative_profile_id: relativeId, relatives });
     await db.relatives_in_common.put({ profile_id: profileId, pairs: others });
+  });
+}
+
+// Adds rows to pairs that already exist, without replacing what is saved.
+// Rows are only added when that person is not already in the pair, so a real
+// endpoint row is never overwritten by a copied one.
+export async function mergeRelativesInCommon(profileId, updates) {
+  if (!profileId || !Array.isArray(updates) || updates.length === 0) return;
+
+  await db.transaction('rw', db.relatives_in_common, async () => {
+    const record = await db.relatives_in_common.get(profileId);
+    if (!record || !Array.isArray(record.pairs)) return;
+
+    const pairs = record.pairs.slice();
+    let changed = false;
+
+    for (const update of updates) {
+      const relativeId = update && String(update.relativeId || '').trim();
+      const row = update && update.row;
+      if (!relativeId || !row || !row.profile_id) continue;
+
+      const pair = pairs.find((item) => item
+        && String(item.relative_profile_id) === relativeId);
+      if (!pair) continue;
+
+      const rows = Array.isArray(pair.relatives) ? pair.relatives.slice() : [];
+      const personId = String(row.profile_id);
+      if (rows.some((item) => item && String(item.profile_id) === personId)) continue;
+
+      rows.push(row);
+      pair.relatives = rows;
+      changed = true;
+    }
+
+    if (changed) {
+      await db.relatives_in_common.put({ profile_id: profileId, pairs });
+    }
   });
 }
 

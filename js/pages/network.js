@@ -15,7 +15,12 @@
 import { networkState as state } from '../core/state.js';
 import { getProfileRelativesInCommon, getSavedRelatives } from '../data/db.js';
 import { initialsOf, profileUrl } from '../core/person.js';
-import { cmFromProportion, numberValue } from '../core/dna.js';
+import {
+  cmFromProportion,
+  ibdIndices,
+  numberValue,
+  ownerIndexEvidence,
+} from '../core/dna.js';
 import { formatRelationship } from '../core/relationships.js';
 import { initialsOfName, labelName, preferences } from '../core/preferences.js';
 import { appHeader, pageUrl } from '../ui/header.js';
@@ -78,43 +83,6 @@ function targetRadius(ibd) {
 function shareStrength(value, max) {
   const number = numberValue(value) ?? 0;
   return Math.sqrt(Math.min(number / max, 1));
-}
-
-// Every IBD column the row carries, e.g. [1, 2].
-function ibdIndices(row) {
-  const indices = [];
-  for (const key of Object.keys(row)) {
-    const match = /^ibd_proportion_(\d+)$/.exec(key);
-    if (match) indices.push(Number(match[1]));
-  }
-  indices.sort((a, b) => a - b);
-  return indices;
-}
-
-// A common-match row usually carries two IBD contexts. One describes the match
-// against the profile; the other against the compared relative. Use the
-// match's own saved direct proportion to identify the profile-side column.
-// Returns that index, or null when the row cannot be trusted.
-function ownerIndexEvidence(row, ownerPerson) {
-  const indices = ibdIndices(row);
-  if (indices.length < 2) return null;
-
-  const ownerProportion = numberValue(ownerPerson && ownerPerson.ibd_proportion);
-  if (ownerProportion === null) return null;
-
-  const tolerance = Math.max(0.0025, Math.abs(ownerProportion) * 0.02);
-  let closest = null;
-  for (const index of indices) {
-    const value = numberValue(row['ibd_proportion_' + index]);
-    if (value === null) continue;
-
-    const distance = Math.abs(value - ownerProportion);
-    if (!closest || distance < closest.distance) {
-      closest = { index, distance };
-    }
-  }
-
-  return closest && closest.distance <= tolerance ? closest.index : null;
 }
 
 // With the profile-side column known, return the other context.
@@ -287,6 +255,11 @@ function buildGraph(relatives, pairs, includeSharedMatches = true) {
 
     const common = Array.isArray(pair.relatives) ? pair.relatives : [];
     for (const row of common) {
+      // Copied rows only fill in another pair's table. The fetched relative's
+      // own pair already supplies this connection, so counting the copy would
+      // pretend it was seen from both directions.
+      if (row && row.derived) continue;
+
       const commonId = String((row && row.profile_id) || '').trim();
       if (!commonId || commonId === a.id) continue;
 

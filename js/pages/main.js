@@ -12,13 +12,18 @@
  *    of moving on to the next one, and a Chrome notification appears.
  * 4. Save all of each pair's relatives in common to IndexedDB so compare.html
  *    can render them.
+ * 5. When a later load finds new relatives, fetch them automatically and add
+ *    them to the saved comparisons that already exist for the people they
+ *    match. Removed relatives keep their saved comparisons.
  */
 
 import { mainState as state } from '../core/state.js';
 import { extractProfiles } from '../data/profiles.js';
 import {
   saveRelatives,
+  getSavedRelatives,
   saveRelativesInCommon,
+  mergeRelativesInCommon,
   getProfileRelativesInCommon,
   deleteProfileData,
   deleteDatabase,
@@ -31,7 +36,7 @@ import {
 } from '../data/db.js';
 import { readJsonProfiles } from '../data/reader.js';
 import { avatar, displayName, profileUrl } from '../core/person.js';
-import { sharedDnaLabel } from '../core/dna.js';
+import { mirroredCommonRelative, sharedDnaLabel } from '../core/dna.js';
 import { labelName } from '../core/preferences.js';
 import { appHeader, dataMenu, pageUrl } from '../ui/header.js';
 
@@ -239,6 +244,19 @@ async function loadRelatives() {
 
     if (seq !== relativesSeq) return;
 
+    let previousIds = new Set();
+    try {
+      const previous = await getSavedRelatives(profileId);
+      previousIds = new Set(previous
+        .map((relative) => relative && relative.relative_profile_id)
+        .filter(Boolean)
+        .map(String));
+    } catch (err) {
+      console.warn('Could not read saved relatives', err);
+    }
+
+    if (seq !== relativesSeq) return;
+
     state.relatives = relatives;
     state.relativesPhase = 'ready';
 
@@ -250,6 +268,32 @@ async function loadRelatives() {
     }
 
     await restoreSavedComparisons(profileId, seq);
+    if (seq !== relativesSeq) return;
+
+    // Only fetch people who were not in the previous saved list. The first
+    // load has nothing to compare against, so it still waits for Start.
+    const seen = new Set();
+    const newRelatives = previousIds.size === 0 ? [] : relatives.filter((relative) => {
+      const relativeId = relative && relative.relative_profile_id;
+      if (!relativeId
+        || previousIds.has(String(relativeId))
+        || state.comparisons[relativeId] === 'ready'
+        || seen.has(String(relativeId))) {
+        return false;
+      }
+
+      seen.add(String(relativeId));
+      return true;
+    });
+
+    if (newRelatives.length > 0) {
+      try {
+        await fetchNewRelatives(profileId, newRelatives, seq);
+      } catch (err) {
+        console.warn('Could not fetch new relatives', err);
+        state.notice = 'Relatives loaded, but the new comparisons could not be fetched.';
+      }
+    }
   } catch (err) {
     if (seq !== relativesSeq || (err && err.name === 'AbortError')) return;
     state.relativesPhase = 'error';
@@ -376,22 +420,110 @@ function stopComparisons() {
   m.redraw.sync();
 }
 
-// Fetches comparisons that are not already saved for every loaded relative,
-// sequentially, with the configured gap. A failed fetch does not skip ahead:
-// the same relative is retried after the configured retry delay until it
-// succeeds or the run is stopped. The row being fetched shows a spinner;
-// finished rows get an Open button.
-async function getRelativesInCommon() {
-  if (!state.selectedId || state.relatives.length === 0 || state.comparisonsRunning) return;
+// Saves one fetch, then adds each match to that match's own saved pair when
+// the pair already exists. That keeps every existing comparison's table
+// complete without fetching each of them again.
+async function savePairAndMirror(profileId, relative, relativesInCommon) {
+  const relativeId = relative.relative_profile_id;
 
-  const profileId = state.selectedId;
-  const targets = state.relatives.filter((relative) => relative.relative_profile_id
-    && state.comparisons[relative.relative_profile_id] !== 'ready');
+  // Snapshot the current list and statuses before the first await, so a
+  // profile switch cannot mix one profile's relatives into another's data.
+  const relatives = state.relatives.slice();
+  const comparisons = { ...state.comparisons };
+
+  const relativesById = new Map();
+  for (const item of relatives) {
+    if (item && item.relative_profile_id) {
+      relativesById.set(String(item.relative_profile_id), item);
+    }
+  }
+
+  const updates = [];
+  for (const row of relativesInCommon) {
+    const matchId = String((row && row.profile_id) || '').trim();
+    if (!matchId || matchId === String(relativeId)) continue;
+
+    const match = relativesById.get(matchId);
+    if (!match) continue;
+
+    // No saved comparison yet: when it is fetched, the endpoint already
+    // includes this relative.
+    if (comparisons[matchId] !== 'ready') continue;
+
+    const mirrored = mirroredCommonRelative(relative, match, row);
+    if (mirrored) updates.push({ relativeId: matchId, row: mirrored });
+  }
+
+  await saveRelativesInCommon(profileId, relativeId, relativesInCommon);
+
+  if (updates.length > 0) {
+    await mergeRelativesInCommon(profileId, updates);
+  }
+}
+
+// Fetches one pair, retrying the same relative until it succeeds. Returns
+// false when the run was stopped or replaced by another profile.
+async function fetchPair(profileId, relative, seq) {
+  const relativeId = relative.relative_profile_id;
+  if (!relativeId) return false;
+
+  for (;;) {
+    if (seq !== comparisonsSeq) return false;
+
+    state.comparisons[relativeId] = 'loading';
+    state.notice = '';
+    m.redraw.sync();
+
+    try {
+      const xhr = await xhrGet(
+        comparisonUrl(profileId, relativeId),
+        (request) => { comparisonXhr = request; },
+      );
+      comparisonXhr = null;
+      if (seq !== comparisonsSeq) return false;
+
+      if (xhr.status < 200 || xhr.status >= 300) {
+        throw new Error('HTTP ' + xhr.status);
+      }
+
+      let payload;
+      try {
+        payload = JSON.parse(xhr.responseText);
+      } catch {
+        throw new Error('response was not JSON');
+      }
+
+      const relativesInCommon = extractCommonRelatives(payload);
+
+      await savePairAndMirror(profileId, relative, relativesInCommon);
+      if (seq !== comparisonsSeq) return false;
+      clearRetryNotification(relativeId);
+      return true;
+    } catch (err) {
+      if (seq !== comparisonsSeq) return false;
+
+      state.comparisons[relativeId] = 'retrying';
+      state.notice = 'Could not get relatives in common for '
+        + (relative.initials || relativeId) + ' ('
+        + (err && err.message ? err.message : String(err))
+        + '). Retrying in ' + formatRemaining(state.retryDelayMs) + '…';
+      notifyRetry(relativeId, relative, err);
+      m.redraw.sync();
+
+      await sleep(state.retryDelayMs);
+      if (seq !== comparisonsSeq) return false;
+    }
+  }
+}
+
+// Fetches a list of pairs sequentially, with the configured gap. A failed
+// fetch does not skip ahead: the same relative is retried until it succeeds
+// or the run is stopped. The row being fetched shows a spinner; finished rows
+// get an Open button.
+async function fetchPairs(profileId, targets, seq) {
   const total = targets.length;
+  if (total === 0 || seq !== comparisonsSeq) return;
 
-  if (total === 0) return;
-
-  const seq = ++comparisonsSeq;
   const startedAt = Date.now();
 
   state.comparisonsRunning = true;
@@ -418,55 +550,7 @@ async function getRelativesInCommon() {
     };
     m.redraw.sync();
 
-    // Retry this same relative until it succeeds; never move on after a
-    // failure.
-    for (;;) {
-      if (seq !== comparisonsSeq) return;
-
-      state.comparisons[relativeId] = 'loading';
-      state.notice = '';
-      m.redraw.sync();
-
-      try {
-        const xhr = await xhrGet(
-          comparisonUrl(profileId, relativeId),
-          (request) => { comparisonXhr = request; },
-        );
-        comparisonXhr = null;
-        if (seq !== comparisonsSeq) return;
-
-        if (xhr.status < 200 || xhr.status >= 300) {
-          throw new Error('HTTP ' + xhr.status);
-        }
-
-        let payload;
-        try {
-          payload = JSON.parse(xhr.responseText);
-        } catch {
-          throw new Error('response was not JSON');
-        }
-
-        const relativesInCommon = extractCommonRelatives(payload);
-
-        await saveRelativesInCommon(profileId, relativeId, relativesInCommon);
-        if (seq !== comparisonsSeq) return;
-        clearRetryNotification(relativeId);
-        break;
-      } catch (err) {
-        if (seq !== comparisonsSeq) return;
-
-        state.comparisons[relativeId] = 'retrying';
-        state.notice = 'Could not get relatives in common for '
-          + (relative.initials || relativeId) + ' ('
-          + (err && err.message ? err.message : String(err))
-          + '). Retrying in ' + formatRemaining(state.retryDelayMs) + '…';
-        notifyRetry(relativeId, relative, err);
-        m.redraw.sync();
-
-        await sleep(state.retryDelayMs);
-        if (seq !== comparisonsSeq) return;
-      }
-    }
+    if (!await fetchPair(profileId, relative, seq)) return;
 
     state.comparisons[relativeId] = 'ready';
     state.comparisonProgress = {
@@ -485,6 +569,30 @@ async function getRelativesInCommon() {
   state.comparisonsRunning = false;
   state.comparisonProgress = null;
   m.redraw.sync();
+}
+
+// Fetches comparisons that are not already saved for every loaded relative.
+async function getRelativesInCommon() {
+  if (!state.selectedId || state.relatives.length === 0 || state.comparisonsRunning) return;
+
+  const profileId = state.selectedId;
+  const targets = state.relatives.filter((relative) => relative.relative_profile_id
+    && state.comparisons[relative.relative_profile_id] !== 'ready');
+
+  if (targets.length === 0) return;
+
+  const seq = ++comparisonsSeq;
+  await fetchPairs(profileId, targets, seq);
+}
+
+// Fetches comparisons for relatives that appeared after the previous saved
+// list. Uses the same runner, so the gap, retries, and Stop button apply.
+async function fetchNewRelatives(profileId, relatives, seq) {
+  if (seq !== relativesSeq || state.selectedId !== profileId) return;
+  if (state.comparisonsRunning || relatives.length === 0) return;
+
+  const runSeq = ++comparisonsSeq;
+  await fetchPairs(profileId, relatives, runSeq);
 }
 
 // Opens compare.html for one relative. The page reads the saved result.
