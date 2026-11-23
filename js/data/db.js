@@ -44,7 +44,8 @@ function byIbdDescending(a, b) {
   return ibdValue(b) - ibdValue(a);
 }
 
-// Replaces the record for one profile, highest IBD proportion first.
+// Replaces the record for one profile, highest IBD proportion first. Any
+// haplogroups already saved on its relatives are carried over by relative id.
 export async function saveRelatives(profileId, relatives) {
   if (!profileId) return;
 
@@ -57,8 +58,68 @@ export async function saveRelatives(profileId, relatives) {
   }
 
   const list = [...unique.values()].sort(byIbdDescending);
+  const existing = await db.profile_relatives.get(profileId);
+  const savedGroups = new Map();
+  const savedRelatives = existing && Array.isArray(existing.relatives)
+    ? existing.relatives
+    : [];
+
+  for (const relative of savedRelatives) {
+    const id = String((relative && relative.relative_profile_id) || '').trim();
+    if (id && relative.haplogroups) savedGroups.set(id, relative.haplogroups);
+  }
+
+  for (const relative of list) {
+    const id = String(relative.relative_profile_id || '').trim();
+    if (!relative.haplogroups && savedGroups.has(id)) {
+      relative.haplogroups = savedGroups.get(id);
+    }
+  }
 
   await db.profile_relatives.put({ profile_id: profileId, relatives: list });
+}
+
+function normalizeHaplogroup(group) {
+  return {
+    maternal: String((group && group.maternal) || '').trim(),
+    paternal: String((group && group.paternal) || '').trim(),
+  };
+}
+
+// Merges maternal/paternal haplogroups into the saved relatives themselves,
+// keyed by relative id. Existing relatives and previously saved groups are kept.
+export async function saveRelativeHaplogroups(profileId, groups) {
+  if (!profileId || !groups || typeof groups !== 'object') return;
+
+  const updates = new Map();
+  for (const [relativeId, group] of Object.entries(groups)) {
+    const id = String(relativeId || '').trim();
+    if (!id) continue;
+
+    const normalized = normalizeHaplogroup(group);
+    if (!normalized.maternal && !normalized.paternal) continue;
+    updates.set(id, normalized);
+  }
+  if (updates.size === 0) return;
+
+  await db.transaction('rw', db.profile_relatives, async () => {
+    const record = await db.profile_relatives.get(profileId);
+    if (!record || !Array.isArray(record.relatives)) return;
+
+    for (const relative of record.relatives) {
+      const id = String((relative && relative.relative_profile_id) || '').trim();
+      if (!updates.has(id)) continue;
+
+      const group = updates.get(id);
+      const previous = relative.haplogroups || {};
+      relative.haplogroups = {
+        maternal: group.maternal || previous.maternal || '',
+        paternal: group.paternal || previous.paternal || '',
+      };
+    }
+
+    await db.profile_relatives.put({ profile_id: profileId, relatives: record.relatives });
+  });
 }
 
 // Stores the relatives in common for one profile + relative pair, keeping
@@ -181,7 +242,11 @@ export async function exportDatabaseJson() {
 
   function ensureProfile(profileId) {
     if (!byProfile.has(profileId)) {
-      byProfile.set(profileId, { profile_id: profileId, relatives: [], pairs: [] });
+      byProfile.set(profileId, {
+        profile_id: profileId,
+        relatives: [],
+        pairs: [],
+      });
     }
     return byProfile.get(profileId);
   }
@@ -321,7 +386,11 @@ export function validateJsonProfile(profile, profileIndex = 0) {
     return { relative_profile_id: relativeId, relatives: pair.relatives };
   });
 
-  return { profile_id: profileId, relatives, pairs: normalizedPairs };
+  return {
+    profile_id: profileId,
+    relatives,
+    pairs: normalizedPairs,
+  };
 }
 
 // Validates a parsed JSON export before anything in IndexedDB is changed.
@@ -377,10 +446,12 @@ export async function clearDatabaseData() {
 // Writes one validated profile from the streaming importer.
 export async function writeImportedProfile(profile) {
   await db.transaction('rw', db.profile_relatives, db.relatives_in_common, async () => {
-    await db.profile_relatives.put({
+    const record = {
       profile_id: profile.profile_id,
       relatives: profile.relatives,
-    });
+    };
+
+    await db.profile_relatives.put(record);
 
     await db.relatives_in_common.put({
       profile_id: profile.profile_id,

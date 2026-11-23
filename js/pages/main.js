@@ -21,6 +21,7 @@ import { mainState as state } from '../core/state.js';
 import { extractProfiles } from '../data/profiles.js';
 import {
   saveRelatives,
+  saveRelativeHaplogroups,
   getSavedRelatives,
   saveRelativesInCommon,
   mergeRelativesInCommon,
@@ -36,6 +37,7 @@ import {
 } from '../data/db.js';
 import { readJsonProfiles } from '../data/reader.js';
 import { avatar, displayName, profileUrl } from '../core/person.js';
+import { haplogroupUrl, pickHaplogroups } from '../core/haplogroups.js';
 import { mirroredCommonRelative, sharedDnaLabel } from '../core/dna.js';
 import { labelName } from '../core/preferences.js';
 import { appHeader, dataMenu, pageUrl } from '../ui/header.js';
@@ -92,6 +94,16 @@ function relativesUrl(profileId) {
 function comparisonUrl(profileId, relativeId) {
   return 'https://you.23andme.com/p/' + encodeURIComponent(profileId)
     + '/profile/' + encodeURIComponent(relativeId) + '/relatives_in_common/';
+}
+
+async function fetchRelativeHaplogroups(profileId, relativeId) {
+  const xhr = await xhrGet(haplogroupUrl(profileId, relativeId));
+  const finalUrl = xhr.responseURL || '';
+
+  if (isLoginUrl(finalUrl)) throw new Error('not signed in');
+  if (xhr.status < 200 || xhr.status >= 300) throw new Error('HTTP ' + xhr.status);
+
+  return pickHaplogroups(JSON.parse(xhr.responseText), relativeId);
 }
 
 // The AJAX routes expect X-Requested-With; without it 23andMe returns HTML.
@@ -251,6 +263,20 @@ async function loadRelatives() {
         .map((relative) => relative && relative.relative_profile_id)
         .filter(Boolean)
         .map(String));
+
+      // The endpoint does not return haplogroups; carry over any saved ones.
+      const savedGroups = new Map();
+      for (const relative of previous) {
+        const id = String((relative && relative.relative_profile_id) || '').trim();
+        if (id && relative.haplogroups) savedGroups.set(id, relative.haplogroups);
+      }
+
+      for (const relative of relatives) {
+        const id = String((relative && relative.relative_profile_id) || '').trim();
+        if (id && !relative.haplogroups && savedGroups.has(id)) {
+          relative.haplogroups = savedGroups.get(id);
+        }
+      }
     } catch (err) {
       console.warn('Could not read saved relatives', err);
     }
@@ -303,6 +329,43 @@ async function loadRelatives() {
       relativesXhr = null;
       m.redraw.sync();
     }
+  }
+}
+
+/* ---------- Haplogroups ---------- */
+
+// Fetches one relative's haplogroups and waits the configured haplogroup delay.
+// Called from the comparison loop so the two requests never run in parallel.
+// Failures are logged and skipped so the data fetch is never blocked.
+async function fetchRelativeHaplogroup(profileId, relative, seq) {
+  const relativeId = String((relative && relative.relative_profile_id) || '').trim();
+  if (!relativeId) return;
+
+  const groups = relative.haplogroups;
+  if (groups && (groups.maternal || groups.paternal)) return;
+
+  try {
+    const found = await fetchRelativeHaplogroups(profileId, relativeId);
+    if (seq !== comparisonsSeq) return;
+
+    if (found.maternal || found.paternal) {
+      const previous = relative.haplogroups || {};
+      relative.haplogroups = {
+        maternal: found.maternal || previous.maternal || '',
+        paternal: found.paternal || previous.paternal || '',
+      };
+      m.redraw.sync();
+
+      try {
+        await saveRelativeHaplogroups(profileId, { [relativeId]: relative.haplogroups });
+      } catch (err) {
+        console.warn('Could not save relative haplogroups', err);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not load haplogroups for relative ' + relativeId, err);
+  } finally {
+    if (seq === comparisonsSeq) await sleep(state.haplogroupGapMs);
   }
 }
 
@@ -531,7 +594,7 @@ async function fetchPairs(profileId, targets, seq) {
   state.comparisonProgress = {
     total,
     done: 0,
-    remainingMs: total * state.comparisonGapMs,
+    remainingMs: total * (state.comparisonGapMs + state.haplogroupGapMs),
   };
   m.redraw.sync();
 
@@ -541,7 +604,9 @@ async function fetchPairs(profileId, targets, seq) {
     const relative = targets[index];
     const relativeId = relative.relative_profile_id;
     const elapsed = Date.now() - startedAt;
-    const average = index > 0 ? elapsed / index : state.comparisonGapMs;
+    const average = index > 0
+      ? elapsed / index
+      : state.comparisonGapMs + state.haplogroupGapMs;
 
     state.comparisonProgress = {
       total,
@@ -549,6 +614,11 @@ async function fetchPairs(profileId, targets, seq) {
       remainingMs: (total - index) * average,
     };
     m.redraw.sync();
+
+    // The haplogroup request runs first and finishes before the comparison
+    // request, so the two never overlap.
+    await fetchRelativeHaplogroup(profileId, relative, seq);
+    if (seq !== comparisonsSeq) return;
 
     if (!await fetchPair(profileId, relative, seq)) return;
 
@@ -929,6 +999,28 @@ function actionFor(relative) {
   return null;
 }
 
+// mtDNA / Y-DNA values for a saved relative.
+function relativeHaplogroups(relative) {
+  const groups = (relative && relative.haplogroups) || {};
+  return {
+    maternal: groups.maternal || '',
+    paternal: groups.paternal || '',
+  };
+}
+
+// 23andMe uses is_sharing on the relatives list; is_open_sharing appears in
+// relatives-in-common rows. Show whichever is present.
+function relativeSharingLabel(relative) {
+  const value = relative && relative.is_sharing !== undefined
+    ? relative.is_sharing
+    : relative && relative.is_open_sharing;
+
+  if (value === undefined || value === null || value === '') return '—';
+  if (value === true || value === 1 || value === 'true' || value === 'yes') return 'yes';
+  if (value === false || value === 0 || value === 'false' || value === 'no') return 'no';
+  return String(value);
+}
+
 const App = {
   view() {
     const placeholder = state.phase === 'loading'
@@ -1037,6 +1129,17 @@ const App = {
                 onchange: delayChangeHandler('retryDelayMs'),
               }),
             ]),
+            m('div.delay-field', [
+              m('label.label.active', { for: 'haplogroupDelay' }, 'Haplogroup delay (seconds)'),
+              m('input#haplogroupDelay', {
+                type: 'number',
+                min: '0',
+                step: 'any',
+                value: String(state.haplogroupGapMs / 1000),
+                title: 'Delay between relative haplogroup requests, in seconds',
+                onchange: delayChangeHandler('haplogroupGapMs'),
+              }),
+            ]),
           ]),
 
           m('div.progress-block', { class: progress ? '' : 'hidden' }, [
@@ -1059,10 +1162,13 @@ const App = {
               m('thead', m('tr', [
                 m('th', 'Relative'),
                 m('th', 'Shared DNA'),
+                m('th', 'mtDNA'),
+                m('th', 'Y-DNA'),
+                m('th', 'Sharing'),
                 m('th.actions-col', 'Relatives in common'),
               ])),
               m('tbody', state.relativesPhase === 'loading'
-                ? m('tr', m('td.empty', { colspan: 3 }, [
+                ? m('tr', m('td.empty', { colspan: 6 }, [
                     m('span.spinner'),
                     ' Loading relatives…',
                   ]))
@@ -1073,6 +1179,7 @@ const App = {
                         avatar(relative),
                         m('span.relative-name', labelName(relative)),
                       ];
+                      const haplogroups = relativeHaplogroups(relative);
 
                       return m('tr', { key: relative.relative_profile_id || index }, [
                         m('td', personUrl
@@ -1084,10 +1191,13 @@ const App = {
                             }, person)
                           : m('div.relative', person)),
                         m('td.dna', { title: 'Estimated from the shared percentage' }, sharedDnaLabel(relative)),
+                        m('td.haplogroup', haplogroups.maternal || '—'),
+                        m('td.haplogroup', haplogroups.paternal || '—'),
+                        m('td.sharing', relativeSharingLabel(relative)),
                         m('td.actions', actionFor(relative)),
                       ]);
                     })
-                  : m('tr', m('td.empty', { colspan: 3 },
+                  : m('tr', m('td.empty', { colspan: 6 },
                       state.relativesPhase === 'error' ? 'Request failed' : 'No relatives'))),
             ])),
           ]),

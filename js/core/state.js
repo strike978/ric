@@ -14,7 +14,8 @@ export const mainState = {
   relativesPhase: 'idle',    // idle | loading | ready | error
   comparisons: {},           // relative id -> loading | retrying | ready
   comparisonsRunning: false,
-  comparisonGapMs: 3000,     // delay between relatives-in-common requests
+  comparisonGapMs: 2000,     // delay between relatives-in-common requests
+  haplogroupGapMs: 1000,     // delay between relative haplogroup requests
   retryDelayMs: 60000,       // delay before retrying a failed request
   comparisonProgress: null,  // { total, done, remainingMs } while fetching
   clearing: false,
@@ -60,6 +61,8 @@ export const networkState = {
     name: '',
     minCM: '',
     maxCM: '',
+    maternal: '',
+    paternal: '',
   },
 };
 

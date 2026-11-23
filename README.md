@@ -20,14 +20,20 @@ one's relatives-in-common list.
 2. Click the extension icon.
 3. Pick a profile from the menu. That profile's DNA relatives load right away
    with a spinner in the table. Each row shows the relative's avatar and name,
-   plus the estimated shared cM and number of segments. Click the avatar or
-   name to open the relative's profile on 23andMe. If you have loaded this
+   the estimated shared cM and number of segments, their mtDNA and Y-DNA
+   haplogroups (once fetched), their sharing status, and the relatives-in-common
+   action. Click the avatar or name to open the relative's profile on 23andMe. If you have loaded this
    profile before, any newly added relatives are fetched automatically and
    added to the saved comparisons of the people they match.
 4. Click **Start** to load comparisons for the loaded
    relatives. The **Delay (seconds)** and **Retry delay (seconds)** fields set
-   the gap between requests (default 3 seconds) and the wait after a failure
-   (default 60 seconds); any non-negative value works. A spinner shows on the
+   the gap between requests (default 2 seconds) and the wait after a failure
+   (default 60 seconds); any non-negative value works. **Haplogroup delay
+   (seconds)** sets the gap after each per-relative haplogroup request (default
+   1 second). Each relative's haplogroup request finishes before that relative's
+   comparison request starts, so the two are never in flight together. These
+   haplogroup requests run only as part of **Start** (and the automatic fetch
+   for newly added relatives), never while browsing. A spinner shows on the
    row being fetched; it becomes **Open** when ready. A progress bar shows how
    many are done and roughly how long is left. If a fetch fails, that same
    relative is retried after the retry delay instead of being skipped, and a
@@ -87,6 +93,9 @@ pair. For each relative in common it shows:
   `relatives-in-common` database): one record in `profile_relatives` per
   selected profile, keyed by its profile id, holding its relatives with every
   field returned by the endpoint, sorted by IBD proportion (highest first).
+  Each saved relative also carries its own `haplogroups` object with maternal
+  (mtDNA) and paternal (Y-DNA) values, fetched one relative at a time from the
+  ancestry compute-result endpoint during a **Start** run.
 - Relatives-in-common results are saved to the `relatives_in_common` store with
   every returned field, and every relative in common is kept. Each profile
   record has a `pairs` array; each pair has the relative's id and a `relatives`
@@ -120,8 +129,9 @@ pair. For each relative in common it shows:
   (about 74.4 cM per percentage point); the segment count comes from the
   response.
 - **Export** writes a JSON file with the format name, version, export time,
-  and a `profiles` array. Each profile holds its saved `relatives` list and its
-  `pairs` list (relatives-in-common comparisons), with every returned field kept.
+  and a `profiles` array. Each profile holds its saved `relatives` list
+  (including each relative's `haplogroups`) and its `pairs` list
+  (relatives-in-common comparisons), with every returned field kept.
 - **Import** validates the JSON format, version, and every profile/pair in a
   first streaming pass, then reads the file again and writes one profile at a
   time. It reads only files made by **Export**.

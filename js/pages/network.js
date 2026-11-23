@@ -151,12 +151,22 @@ function filtersActive(filters = state.filters) {
   return Boolean(
     String(filters.name || '').trim()
     || numberValue(filters.minCM) !== null
-    || numberValue(filters.maxCM) !== null,
+    || numberValue(filters.maxCM) !== null
+    || String(filters.maternal || '').trim()
+    || String(filters.paternal || '').trim(),
   );
 }
 
-// A node passes when its name contains the search text and its sharing with the
-// profile falls inside the cM bounds. Empty fields impose no constraint.
+function haplogroupMatches(value, filter) {
+  const needle = String(filter || '').trim().toLowerCase();
+  if (!needle) return true;
+
+  return String(value || '').trim().toLowerCase().includes(needle);
+}
+
+// A node passes when its name contains the search text, its sharing with the
+// profile falls inside the cM bounds, and its haplogroups contain the typed
+// text. Empty fields impose no constraint.
 function passesFilters(person, ibd, filters) {
   if (!filters) return true;
 
@@ -179,6 +189,18 @@ function passesFilters(person, ibd, filters) {
     if (cM === null) return false;
     if (min !== null && cM < min) return false;
     if (max !== null && cM > max) return false;
+  }
+
+  const maternal = String(filters.maternal || '').trim();
+  const paternal = String(filters.paternal || '').trim();
+  if (maternal || paternal) {
+    // Females have no Y chromosome, so a Y-DNA filter never matches them.
+    if (paternal && isFemale(person)) return false;
+
+    const groups = person && person.haplogroups;
+    if (!groups) return false;
+    if (!haplogroupMatches(groups.maternal, maternal)) return false;
+    if (!haplogroupMatches(groups.paternal, paternal)) return false;
   }
 
   return true;
@@ -1121,6 +1143,8 @@ function clearFilters() {
   state.filters.name = '';
   state.filters.minCM = '';
   state.filters.maxCM = '';
+  state.filters.maternal = '';
+  state.filters.paternal = '';
   applyFilters();
 }
 
@@ -1411,6 +1435,18 @@ function rowShell(node, button) {
   ]);
 }
 
+function haplogroupLine(person) {
+  const groups = person && person.haplogroups;
+  if (!groups) return null;
+
+  const parts = [];
+  if (groups.maternal) parts.push('mtDNA ' + groups.maternal);
+  if (groups.paternal) parts.push('Y-DNA ' + groups.paternal);
+  if (parts.length === 0) return null;
+
+  return m('span.network-row-haplogroups', parts.join(' · '));
+}
+
 function personRow(node, edge) {
   const cM = cmFromProportion(edge.weight);
 
@@ -1425,6 +1461,7 @@ function personRow(node, edge) {
         edgeRelationship(edge, node),
         cM === null ? '' : cM + ' cM',
       ].filter(Boolean).join(' · ')),
+      haplogroupLine(node.person),
     ]),
   ]));
 }
@@ -1633,10 +1670,55 @@ function cmInput(kind, label) {
   });
 }
 
+function isFemale(person) {
+  const sex = String((person && person.sex) || '').trim().toLowerCase();
+  return sex === 'female' || sex === 'f';
+}
+
+function haplogroupOptions(kind) {
+  const values = new Set();
+
+  for (const relative of rawData.relatives || []) {
+    // Females have no Y chromosome, so their rows never feed the Y-DNA menu.
+    if (kind === 'paternal' && isFemale(relative)) continue;
+
+    const value = relative && relative.haplogroups && relative.haplogroups[kind];
+    if (value) values.add(String(value).trim());
+  }
+
+  return [...values].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+// Searchable: type to narrow the menu or pick a value from the datalist.
+function haploInput(kind, placeholder, label) {
+  const listId = 'network-haplo-' + kind + '-options';
+
+  return [
+    m('input.network-filter-haplo.browser-default', {
+      type: 'search',
+      list: listId,
+      placeholder,
+      value: state.filters[kind] || '',
+      autocomplete: 'off',
+      spellcheck: 'false',
+      'aria-label': label,
+      oninput: (event) => {
+        state.filters[kind] = event.target.value;
+        scheduleFilterApply();
+      },
+    }),
+    m('datalist', { id: listId },
+      haplogroupOptions(kind).map((option) => m('option', { value: option }))),
+  ];
+}
+
 function activeFilterCount() {
   let count = 0;
   if (String(state.filters.name || '').trim()) count += 1;
   if (numberValue(state.filters.minCM) !== null || numberValue(state.filters.maxCM) !== null) count += 1;
+  if (String(state.filters.maternal || '').trim() || String(state.filters.paternal || '').trim()) {
+    count += 1;
+  }
   return count;
 }
 
@@ -1672,7 +1754,7 @@ function filterMenu() {
   }, [
     m('summary.network-filter-trigger', {
       class: active ? 'network-filter-trigger active' : 'network-filter-trigger',
-      title: 'Filter relatives by name or shared cM',
+      title: 'Filter relatives by name, shared cM, or haplogroup',
     }, [
       funnelIcon(),
       m('span', 'Filter'),
@@ -1708,6 +1790,13 @@ function filterMenu() {
           m('span.network-filter-dash', '–'),
           cmInput('max', 'Maximum shared cM'),
           m('span.network-filter-unit', 'cM'),
+        ]),
+      ]),
+      m('div.network-filter-field', [
+        m('span.network-filter-label', 'Haplogroups'),
+        m('div.network-filter-haplo-row', [
+          haploInput('maternal', 'Search mtDNA', 'Filter by maternal haplogroup'),
+          haploInput('paternal', 'Search Y-DNA', 'Filter by paternal haplogroup'),
         ]),
       ]),
       m('div.network-filter-footer', [

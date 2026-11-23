@@ -185,6 +185,8 @@ select:disabled { opacity: 0.6; }
 
 .relatives-table tbody tr:last-child td { border-bottom: none; }
 .relatives-table td.dna { color: #cfd6e4; white-space: nowrap; }
+.relatives-table td.haplogroup { color: #cfd6e4; white-space: nowrap; }
+.relatives-table td.sharing { color: var(--md-muted); white-space: nowrap; }
 .relatives-table td.empty { color: var(--muted); text-align: center; padding: 18px; }
 
 .relative {
@@ -1168,6 +1170,37 @@ main.container.network-container {
   font-size: 11px;
 }
 
+.network-filter-haplo-row {
+  display: flex;
+  gap: 6px;
+}
+
+.network-filter-haplo {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 32px;
+  margin: 0;
+  padding: 0 9px;
+  border: 1px solid var(--md-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--md-text);
+  font-family: var(--sans);
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.network-filter-haplo::placeholder {
+  color: var(--md-dim);
+}
+
+.network-filter-haplo:focus {
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.16);
+}
+
 .network-filter-unit {
   padding-left: 3px;
   color: var(--md-dim);
@@ -1432,6 +1465,14 @@ main.container.network-container {
   overflow: hidden;
   color: var(--md-dim);
   font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-row-haplogroups {
+  overflow: hidden;
+  color: #93a4bd;
+  font-size: 9.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
