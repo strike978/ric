@@ -971,6 +971,250 @@ main.container.network-container {
   line-height: 30px;
 }
 
+/* Filter popover in the toolbar */
+.network-filter-menu {
+  position: relative;
+}
+
+.network-filter-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--md-border);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--md-muted);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 32px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.network-filter-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.network-filter-trigger:hover,
+.network-filter-trigger:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--md-text);
+  outline: none;
+}
+
+.network-filter-trigger.active {
+  border-color: rgba(138, 180, 248, 0.55);
+  background: rgba(138, 180, 248, 0.12);
+  color: var(--md-primary-strong);
+}
+
+.network-filter-funnel {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.network-filter-caret {
+  margin-left: 1px;
+  font-size: 9px;
+  opacity: 0.7;
+  transition: transform 120ms ease;
+}
+
+.network-filter-menu[open] .network-filter-caret {
+  transform: rotate(180deg);
+}
+
+.network-filter-badge {
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(138, 180, 248, 0.3);
+  color: #eaf1ff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.network-filter-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 272px;
+  padding: 12px;
+  border: 1px solid var(--md-border);
+  border-radius: 10px;
+  background: #1a1f28;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+.network-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.network-filter-label {
+  color: var(--md-dim);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.network-filter-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid var(--md-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.network-filter-search:focus-within {
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.16);
+}
+
+.network-filter-icon {
+  position: absolute;
+  left: 9px;
+  width: 13px;
+  height: 13px;
+  color: var(--md-dim);
+  pointer-events: none;
+}
+
+.network-filter-name {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 10px 0 28px;
+  border: 0;
+  background: transparent;
+  color: var(--md-text);
+  font-family: var(--sans);
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.network-filter-name::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.network-filter-name::placeholder,
+.network-filter-cm::placeholder {
+  color: var(--md-dim);
+}
+
+.network-filter-range {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--md-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.network-filter-range:focus-within {
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.16);
+}
+
+.network-filter-cm {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--md-text);
+  font-family: var(--sans);
+  font-size: 12px;
+  text-align: center;
+  outline: none;
+  box-sizing: border-box;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.network-filter-cm::-webkit-outer-spin-button,
+.network-filter-cm::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.network-filter-dash {
+  color: var(--md-dim);
+  font-size: 11px;
+}
+
+.network-filter-unit {
+  padding-left: 3px;
+  color: var(--md-dim);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.network-filter-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--md-border);
+}
+
+.network-filter-count {
+  color: var(--md-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.network-filter-clear {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--md-primary);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.network-filter-clear:hover:not(:disabled),
+.network-filter-clear:focus-visible {
+  background: rgba(138, 180, 248, 0.12);
+  outline: none;
+}
+
+.network-filter-clear:disabled {
+  color: var(--md-dim);
+  opacity: 0.5;
+  cursor: default;
+}
+
 .network-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
@@ -1369,6 +1613,12 @@ main.container.network-container {
 @media (max-width: 640px) {
   .nav-inner {
     gap: 8px;
+  }
+
+  .network-filter-panel {
+    right: auto;
+    left: 0;
+    width: min(272px, calc(100vw - 40px));
   }
 
   nav.app-nav h1 {

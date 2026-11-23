@@ -46,6 +46,7 @@ export const networkState = {
   adjacency: new Map(),    // node id -> [{ node, edge }]
   stats: {
     relatives: 0,
+    totalRelatives: 0,
     matches: 0,
     connections: 0,
     shared: 0,
@@ -55,5 +56,10 @@ export const networkState = {
   selectedId: '',          // node id, or '' for the overview
   labels: true,            // draw names next to nodes
   includeSharedMatches: true, // shared matches seen under 2+ relatives
+  filters: {               // graph filter, applied when the graph is rebuilt
+    name: '',
+    minCM: '',
+    maxCM: '',
+  },
 };
 

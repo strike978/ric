@@ -147,9 +147,50 @@ function ownerIndexForMatch(rows, fallback) {
   return fallback;
 }
 
-function buildGraph(relatives, pairs, includeSharedMatches = true) {
+function filtersActive(filters = state.filters) {
+  return Boolean(
+    String(filters.name || '').trim()
+    || numberValue(filters.minCM) !== null
+    || numberValue(filters.maxCM) !== null,
+  );
+}
+
+// A node passes when its name contains the search text and its sharing with the
+// profile falls inside the cM bounds. Empty fields impose no constraint.
+function passesFilters(person, ibd, filters) {
+  if (!filters) return true;
+
+  const name = String(filters.name || '').trim().toLowerCase();
+  if (name) {
+    const haystack = [
+      person && person.first_name,
+      person && person.last_name,
+      person && person.first_initial,
+      person && person.last_initial,
+      person && person.initials,
+    ].filter(Boolean).join(' ').toLowerCase();
+    if (!haystack.includes(name)) return false;
+  }
+
+  const min = numberValue(filters.minCM);
+  const max = numberValue(filters.maxCM);
+  if (min !== null || max !== null) {
+    const cM = cmFromProportion(ibd);
+    if (cM === null) return false;
+    if (min !== null && cM < min) return false;
+    if (max !== null && cM > max) return false;
+  }
+
+  return true;
+}
+
+function buildGraph(relatives, pairs, includeSharedMatches = true, filters = state.filters) {
   const nodes = [];
   const byId = new Map();
+  // Keep the current layout for nodes that survive a filter change so the
+  // graph does not jump around while the user types.
+  const previous = new Map((state.nodes || []).map((node) => [node.id, node]));
+  const preserved = new Set();
 
   const owner = {
     id: OWNER_ID,
@@ -172,20 +213,25 @@ function buildGraph(relatives, pairs, includeSharedMatches = true) {
   for (const relative of relatives) {
     const id = String((relative && relative.relative_profile_id) || '').trim();
     if (!id || seen.has(id)) continue;
-    seen.add(id);
 
     const ibd = numberValue(relative.ibd_proportion);
+    if (!passesFilters(relative, ibd, filters)) continue;
+
+    seen.add(id);
+    const old = previous.get(id);
+    if (old) preserved.add(id);
+
     const node = {
       id,
       kind: 'relative',
       person: relative,
       ibd,
       radius: radiusFor(ibd),
-      x: 0,
-      y: 0,
-      vx: 0,
-      vy: 0,
-      pinned: false,
+      x: old ? old.x : 0,
+      y: old ? old.y : 0,
+      vx: old ? old.vx : 0,
+      vy: old ? old.vy : 0,
+      pinned: old ? old.pinned : false,
       degree: 0,
     };
     nodes.push(node);
@@ -349,6 +395,10 @@ function buildGraph(relatives, pairs, includeSharedMatches = true) {
         num_segments: average(ownerSegments),
       };
       const ibd = numberValue(person.ibd_proportion);
+      if (!passesFilters(person, ibd, filters)) continue;
+
+      const old = previous.get(stat.id);
+      if (old) preserved.add(stat.id);
 
       const node = {
         id: stat.id,
@@ -357,11 +407,11 @@ function buildGraph(relatives, pairs, includeSharedMatches = true) {
         ibd,
         radius: radiusForMatch(ibd),
         pairCount: stat.pairIds.size,
-        x: 0,
-        y: 0,
-        vx: 0,
-        vy: 0,
-        pinned: false,
+        x: old ? old.x : 0,
+        y: old ? old.y : 0,
+        vx: old ? old.vx : 0,
+        vy: old ? old.vy : 0,
+        pinned: old ? old.pinned : false,
         degree: 0,
       };
       nodes.push(node);
@@ -377,6 +427,8 @@ function buildGraph(relatives, pairs, includeSharedMatches = true) {
     .sort((a, b) => (b.ibd ?? 0) - (a.ibd ?? 0));
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   positioned.forEach((node, index) => {
+    if (preserved.has(node.id)) return;
+
     const angle = index * goldenAngle;
     const radius = targetRadius(node.ibd);
     node.x = Math.cos(angle) * radius;
@@ -441,6 +493,7 @@ function buildGraph(relatives, pairs, includeSharedMatches = true) {
   state.selectedId = '';
   state.stats = {
     relatives: savedRelativeNodes.length,
+    totalRelatives: relatives.length,
     matches: includedMatches.length,
     connections: edges.length,
     shared: sharedEdges.length,
@@ -894,23 +947,16 @@ function roundRect(ctx, x, y, width, height, radius) {
 function drawLabels(focus, nearby) {
   const ctx = view.ctx;
   const candidates = [];
-  const lowDetail = view.camera.scale < 0.75;
 
   for (const node of state.nodes) {
     if (nearby && !nearby.has(node.id) && node !== focus) continue;
 
     const isFocus = node === focus;
-    if (view.camera.scale < 0.28 && !isFocus && node.kind !== 'owner') continue;
-
     const radius = Math.max(3, node.radius * view.camera.scale);
 
     // When names are hidden, put the initials on small nodes instead of
     // leaving them unlabelled. Larger nodes already show initials inside.
     if (preferences.hideNames && node.kind !== 'owner' && !isFocus && radius >= 7) continue;
-
-    // At low zoom, leave out the very distant or barely connected names.
-    if (!preferences.hideNames && lowDetail && !isFocus && node.kind !== 'owner'
-      && (node.ibd ?? 0) < 0.01 && node.degree < 3 && (node.pairCount ?? 0) < 2) continue;
 
     const point = project(node);
     if (point.x < -90 || point.x > view.width + 90
@@ -931,7 +977,9 @@ function drawLabels(focus, nearby) {
   candidates.sort((a, b) => a.priority - b.priority);
 
   const placed = [];
-  const maxLabels = Math.min(110, Math.round(10 + view.camera.scale * 40)
+  // Labels never overlap, so the cap only needs to scale gently with zoom.
+  // A floor keeps the closest relatives named even when the whole graph fits.
+  const maxLabels = Math.min(140, Math.max(18, Math.round(14 + view.camera.scale * 50))
     + (preferences.hideNames ? 30 : 0));
   let drawn = 0;
 
@@ -1040,10 +1088,40 @@ function selectNode(node, center = false) {
 function toggleSharedMatches() {
   state.includeSharedMatches = !state.includeSharedMatches;
   state.selectedId = '';
-  buildGraph(rawData.relatives, rawData.pairs, state.includeSharedMatches);
+  buildGraph(rawData.relatives, rawData.pairs, state.includeSharedMatches, state.filters);
   hideTooltip();
   m.redraw.sync();
   startSimulation();
+}
+
+/* ---------- Filtering ---------- */
+
+let filterTimer = 0;
+
+function applyFilters(fresh = false) {
+  clearTimeout(filterTimer);
+  filterTimer = 0;
+
+  buildGraph(rawData.relatives, rawData.pairs, state.includeSharedMatches, state.filters);
+  hideTooltip();
+  m.redraw.sync();
+  startSimulation(fresh);
+}
+
+// Wait for a pause in typing before rebuilding the graph.
+function scheduleFilterApply() {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => {
+    filterTimer = 0;
+    applyFilters();
+  }, 180);
+}
+
+function clearFilters() {
+  state.filters.name = '';
+  state.filters.minCM = '';
+  state.filters.maxCM = '';
+  applyFilters();
 }
 
 function onPointerDown(event) {
@@ -1274,7 +1352,7 @@ async function loadNetwork() {
     ]);
 
     rawData = { relatives, pairs };
-    buildGraph(relatives, pairs, state.includeSharedMatches);
+    buildGraph(relatives, pairs, state.includeSharedMatches, state.filters);
     if (initialRelativeId && nodeById.has(initialRelativeId)) {
       state.selectedId = initialRelativeId;
     }
@@ -1415,7 +1493,9 @@ function overviewPanel() {
           m('h3.network-section-title', 'Closest relatives'),
           m('div.network-list', top.map(({ node, edge }) => personRow(node, edge))),
         ]
-      : m('p.network-panel-empty', state.notice || 'No relatives saved for this profile.'),
+      : m('p.network-panel-empty', filtersActive()
+        ? 'No relatives match these filters.'
+        : state.notice || 'No relatives saved for this profile.'),
     connectors.length
       ? [
           m('h3.network-section-title', 'Top connectors'),
@@ -1508,6 +1588,140 @@ function networkSidebar() {
   return m('aside.network-sidebar', node ? detailPanel(node) : overviewPanel());
 }
 
+function searchIcon() {
+  return m('svg.network-filter-icon', {
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': '2',
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+    'aria-hidden': 'true',
+  }, [
+    m('circle', { cx: '11', cy: '11', r: '7' }),
+    m('path', { d: 'm20 20-3.5-3.5' }),
+  ]);
+}
+
+function funnelIcon() {
+  return m('svg.network-filter-funnel', {
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': '2',
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+    'aria-hidden': 'true',
+  }, m('path', { d: 'M4 5h16l-6 7v5l-4 2v-7z' }));
+}
+
+function cmInput(kind, label) {
+  return m('input.network-filter-cm.browser-default', {
+    type: 'number',
+    min: '0',
+    step: '10',
+    inputmode: 'numeric',
+    placeholder: kind === 'min' ? 'Min' : 'Max',
+    value: state.filters[kind === 'min' ? 'minCM' : 'maxCM'],
+    'aria-label': label,
+    oninput: (event) => {
+      state.filters[kind === 'min' ? 'minCM' : 'maxCM'] = event.target.value;
+      scheduleFilterApply();
+    },
+  });
+}
+
+function activeFilterCount() {
+  let count = 0;
+  if (String(state.filters.name || '').trim()) count += 1;
+  if (numberValue(state.filters.minCM) !== null || numberValue(state.filters.maxCM) !== null) count += 1;
+  return count;
+}
+
+// Close the popover when the pointer lands outside it.
+function closeFilterMenu(event) {
+  const menu = document.querySelector('.network-filter-menu');
+  if (menu && menu.open && !menu.contains(event.target)) menu.open = false;
+}
+
+function closeFilterMenuOnEscape(event) {
+  if (event.key !== 'Escape') return;
+  const menu = document.querySelector('.network-filter-menu');
+  if (menu && menu.open) menu.open = false;
+}
+
+function filterMenu() {
+  if (state.loading || !profileId) return null;
+
+  const active = filtersActive();
+  const activeCount = activeFilterCount();
+  const total = state.stats.totalRelatives;
+  const shown = state.stats.relatives;
+
+  return m('details.network-filter-menu', {
+    oncreate: () => {
+      document.addEventListener('pointerdown', closeFilterMenu);
+      document.addEventListener('keydown', closeFilterMenuOnEscape);
+    },
+    onremove: () => {
+      document.removeEventListener('pointerdown', closeFilterMenu);
+      document.removeEventListener('keydown', closeFilterMenuOnEscape);
+    },
+  }, [
+    m('summary.network-filter-trigger', {
+      class: active ? 'network-filter-trigger active' : 'network-filter-trigger',
+      title: 'Filter relatives by name or shared cM',
+    }, [
+      funnelIcon(),
+      m('span', 'Filter'),
+      activeCount
+        ? m('span.network-filter-badge', activeCount)
+        : null,
+      m('span.network-filter-caret', { 'aria-hidden': 'true' }, '▾'),
+    ]),
+
+    m('div.network-filter-panel', { role: 'search', 'aria-label': 'Filter relatives' }, [
+      m('label.network-filter-field', [
+        m('span.network-filter-label', 'Name'),
+        m('div.network-filter-search', [
+          searchIcon(),
+          m('input.network-filter-name.browser-default', {
+            type: 'search',
+            placeholder: 'Search relatives',
+            value: state.filters.name,
+            autocomplete: 'off',
+            spellcheck: 'false',
+            'aria-label': 'Filter relatives by name',
+            oninput: (event) => {
+              state.filters.name = event.target.value;
+              scheduleFilterApply();
+            },
+          }),
+        ]),
+      ]),
+      m('div.network-filter-field', [
+        m('span.network-filter-label', 'Shared cM'),
+        m('div.network-filter-range', [
+          cmInput('min', 'Minimum shared cM'),
+          m('span.network-filter-dash', '–'),
+          cmInput('max', 'Maximum shared cM'),
+          m('span.network-filter-unit', 'cM'),
+        ]),
+      ]),
+      m('div.network-filter-footer', [
+        m('span.network-filter-count', active
+          ? shown + ' of ' + total + (total === 1 ? ' relative' : ' relatives')
+          : total + (total === 1 ? ' relative' : ' relatives')),
+        m('button.network-filter-clear', {
+          type: 'button',
+          disabled: !active,
+          onclick: clearFilters,
+        }, 'Clear'),
+      ]),
+    ]),
+  ]);
+}
+
 const App = {
   view() {
     const subtitle = profileName || 'No profile selected';
@@ -1537,6 +1751,7 @@ const App = {
               m('span.network-hint', 'Drag to pan · scroll to zoom · hover for links'),
             ]),
             m('div.network-tools', [
+              filterMenu(),
               m('button', {
                 type: 'button',
                 class: state.includeSharedMatches
