@@ -999,12 +999,17 @@ function actionFor(relative) {
   return null;
 }
 
-// mtDNA / Y-DNA values for a saved relative.
+// mtDNA / Y-DNA values for a saved relative. Females have no Y chromosome, so
+// their row never shows a paternal haplogroup, even if one was saved by mistake.
 function relativeHaplogroups(relative) {
   const groups = (relative && relative.haplogroups) || {};
+  const sex = String((relative && relative.sex) || '').trim().toLowerCase();
+  const female = sex === 'female' || sex === 'f';
+
   return {
     maternal: groups.maternal || '',
-    paternal: groups.paternal || '',
+    paternal: female ? '' : (groups.paternal || ''),
+    female,
   };
 }
 
@@ -1192,7 +1197,8 @@ const App = {
                           : m('div.relative', person)),
                         m('td.dna', { title: 'Estimated from the shared percentage' }, sharedDnaLabel(relative)),
                         m('td.haplogroup', haplogroups.maternal || '—'),
-                        m('td.haplogroup', haplogroups.paternal || '—'),
+                        m('td.haplogroup', haplogroups.paternal
+                          || (haplogroups.female ? '' : '—')),
                         m('td.sharing', relativeSharingLabel(relative)),
                         m('td.actions', actionFor(relative)),
                       ]);

@@ -13,8 +13,9 @@
  */
 
 import { networkState as state } from '../core/state.js';
-import { getProfileRelativesInCommon, getSavedRelatives } from '../data/db.js';
+import { getProfileRelativesInCommon, getSavedRelatives, saveRelativeHaplogroups } from '../data/db.js';
 import { initialsOf, ownProfileUrl, profileUrl } from '../core/person.js';
+import { haplogroupUrl, pickHaplogroups } from '../core/haplogroups.js';
 import {
   cmFromProportion,
   ibdIndices,
@@ -1439,9 +1440,12 @@ function haplogroupLine(person) {
   const groups = person && person.haplogroups;
   if (!groups) return null;
 
+  const sex = String((person && person.sex) || '').trim().toLowerCase();
+  const female = sex === 'female' || sex === 'f';
+
   const parts = [];
   if (groups.maternal) parts.push('mtDNA ' + groups.maternal);
-  if (groups.paternal) parts.push('Y-DNA ' + groups.paternal);
+  if (!female && groups.paternal) parts.push('Y-DNA ' + groups.paternal);
   if (parts.length === 0) return null;
 
   return m('span.network-row-haplogroups', parts.join(' · '));
@@ -1675,6 +1679,85 @@ function isFemale(person) {
   return sex === 'female' || sex === 'f';
 }
 
+const haploLoad = { active: false, done: 0, total: 0 };
+
+function relativesMissingHaplogroups() {
+  return (rawData.relatives || []).filter((relative) => {
+    const id = String((relative && relative.relative_profile_id) || '').trim();
+    if (!id) return false;
+
+    const groups = relative.haplogroups;
+    return !groups || (!groups.maternal && !groups.paternal);
+  });
+}
+
+function requestHaplogroups(viewerId, relativeId) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', haplogroupUrl(viewerId, relativeId), true);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error('HTTP ' + xhr.status));
+        return;
+      }
+
+      try {
+        resolve(pickHaplogroups(JSON.parse(xhr.responseText), relativeId));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send();
+  });
+}
+
+// Loads haplogroups for relatives that do not have them yet, one at a time.
+// Runs only when the user asks for it from the filter menu.
+async function loadMissingHaplogroups() {
+  const pending = relativesMissingHaplogroups();
+  if (haploLoad.active || pending.length === 0) return;
+
+  haploLoad.active = true;
+  haploLoad.done = 0;
+  haploLoad.total = pending.length;
+  m.redraw.sync();
+
+  for (let index = 0; index < pending.length; index += 1) {
+    const relative = pending[index];
+    const relativeId = String(relative.relative_profile_id).trim();
+
+    try {
+      const found = await requestHaplogroups(profileId, relativeId);
+      if (found.maternal || found.paternal) {
+        relative.haplogroups = found;
+        m.redraw.sync();
+
+        try {
+          await saveRelativeHaplogroups(profileId, { [relativeId]: found });
+        } catch (err) {
+          console.warn('Could not save relative haplogroups', err);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not load haplogroups for relative ' + relativeId, err);
+    }
+
+    haploLoad.done = index + 1;
+    m.redraw.sync();
+
+    if (index + 1 < pending.length) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+
+  haploLoad.active = false;
+  m.redraw.sync();
+}
+
 function haplogroupOptions(kind) {
   const values = new Set();
 
@@ -1689,27 +1772,53 @@ function haplogroupOptions(kind) {
   return [...values].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
-// Searchable: type to narrow the menu or pick a value from the datalist.
-function haploInput(kind, placeholder, label) {
-  const listId = 'network-haplo-' + kind + '-options';
+// Typing here filters the graph at the same time as it narrows the menu.
+function haploSearchInput(kind, placeholder, label) {
+  return m('input.network-filter-haplo.browser-default', {
+    type: 'search',
+    placeholder,
+    value: state.filters[kind] || '',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    'aria-label': label,
+    oninput: (event) => {
+      state.filters[kind] = event.target.value;
+      m.redraw.sync();
+      scheduleFilterApply();
+    },
+  });
+}
 
-  return [
-    m('input.network-filter-haplo.browser-default', {
-      type: 'search',
-      list: listId,
-      placeholder,
-      value: state.filters[kind] || '',
-      autocomplete: 'off',
-      spellcheck: 'false',
-      'aria-label': label,
-      oninput: (event) => {
-        state.filters[kind] = event.target.value;
-        scheduleFilterApply();
-      },
-    }),
-    m('datalist', { id: listId },
-      haplogroupOptions(kind).map((option) => m('option', { value: option }))),
-  ];
+function haploSelect(kind, placeholder) {
+  const value = state.filters[kind] || '';
+  const needle = String(value).trim().toLowerCase();
+  const all = haplogroupOptions(kind);
+  const exact = all.some((option) => option.toLowerCase() === needle);
+
+  // While the text is a partial search, narrow the menu. Once it matches a
+  // value exactly, show every option again so switching is easy.
+  let options = needle && !exact
+    ? all.filter((option) => option.toLowerCase().includes(needle))
+    : all;
+
+  // Keep the current value visible even when the search text hides it.
+  if (value && !options.includes(value)) options = [value, ...options];
+
+  return m('select.network-filter-haplo.browser-default', {
+    value,
+    'aria-label': 'Select a ' + (kind === 'maternal' ? 'mtDNA' : 'Y-DNA') + ' haplogroup',
+    onchange: (event) => {
+      state.filters[kind] = event.target.value;
+      applyFilters();
+    },
+  }, [
+    m('option', { key: 'any', value: '', selected: value === '' }, placeholder),
+    ...options.map((option) => m('option', {
+      key: option,
+      value: option,
+      selected: option === value,
+    }, option)),
+  ]);
 }
 
 function activeFilterCount() {
@@ -1730,6 +1839,7 @@ function closeFilterMenu(event) {
 
 function closeFilterMenuOnEscape(event) {
   if (event.key !== 'Escape') return;
+
   const menu = document.querySelector('.network-filter-menu');
   if (menu && menu.open) menu.open = false;
 }
@@ -1741,6 +1851,7 @@ function filterMenu() {
   const activeCount = activeFilterCount();
   const total = state.stats.totalRelatives;
   const shown = state.stats.relatives;
+  const missingHaplogroups = relativesMissingHaplogroups().length;
 
   return m('details.network-filter-menu', {
     oncreate: () => {
@@ -1793,12 +1904,30 @@ function filterMenu() {
         ]),
       ]),
       m('div.network-filter-field', [
-        m('span.network-filter-label', 'Haplogroups'),
+        m('span.network-filter-label.network-filter-label-haplo', 'mtDNA'),
         m('div.network-filter-haplo-row', [
-          haploInput('maternal', 'Search mtDNA', 'Filter by maternal haplogroup'),
-          haploInput('paternal', 'Search Y-DNA', 'Filter by paternal haplogroup'),
+          haploSearchInput('maternal', 'Search mtDNA', 'Search mtDNA haplogroups'),
+          haploSelect('maternal', 'Any mtDNA'),
         ]),
       ]),
+      m('div.network-filter-field', [
+        m('span.network-filter-label.network-filter-label-haplo', 'Y-DNA'),
+        m('div.network-filter-haplo-row', [
+          haploSearchInput('paternal', 'Search Y-DNA', 'Search Y-DNA haplogroups'),
+          haploSelect('paternal', 'Any Y-DNA'),
+        ]),
+      ]),
+      missingHaplogroups > 0
+        ? m('div.network-filter-haplo-load', [
+            m('button.network-filter-haplo-load-btn', {
+              type: 'button',
+              disabled: haploLoad.active,
+              onclick: loadMissingHaplogroups,
+            }, haploLoad.active
+              ? 'Loading haplogroups… ' + haploLoad.done + '/' + haploLoad.total
+              : 'Load haplogroups (' + missingHaplogroups + ')'),
+          ])
+        : null,
       m('div.network-filter-footer', [
         m('span.network-filter-count', active
           ? shown + ' of ' + total + (total === 1 ? ' relative' : ' relatives')
