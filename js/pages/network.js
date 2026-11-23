@@ -1482,7 +1482,9 @@ function overviewPanel() {
           : ' · all confirmed'))
       : null,
     state.stats.shared === 0 && state.stats.relatives > 0
-      ? m('p.network-help.network-hint-block', 'No links between relatives yet. Use Start on the relatives page to add them.')
+      ? (filtersActive()
+        ? m('p.network-help', 'No shared links among the relatives matching these filters.')
+        : m('p.network-help.network-hint-block', 'No links between relatives yet. Use Start on the relatives page to add them.'))
       : null,
     state.stats.shared > 0
       ? m('p.network-help', 'Showing the ' + featuredEdges.size
@@ -1503,7 +1505,7 @@ function overviewPanel() {
         ]
       : null,
     m('div.network-legend', [
-      m('span.network-legend-item', [m('span.network-legend-line.owner'), 'profile sharing']),
+      m('span.network-legend-item', [m('span.network-legend-line.owner'), 'shared with profile']),
       m('span.network-legend-item', [m('span.network-legend-line.shared'), 'shared links']),
       state.stats.oneSided > 0
         ? m('span.network-legend-item', [m('span.network-legend-line.oneway'), 'one-sided'])
