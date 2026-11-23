@@ -1099,11 +1099,19 @@ main.container.network-container {
   gap: 1px;
 }
 
+.network-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px;
+}
+
 .network-row {
   display: flex;
   align-items: center;
+  flex: 1;
+  min-width: 0;
   gap: 8px;
-  width: 100%;
   padding: 6px 7px;
   border: 0;
   border-radius: 6px;
@@ -1112,11 +1120,46 @@ main.container.network-container {
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.network-row:focus {
+  /* Materialize paints bare buttons teal on :focus; keep our own surface. */
+  outline: none;
+  background: transparent;
 }
 
 .network-row:hover,
-.network-row:focus {
+.network-row:focus-visible {
   background: rgba(138, 180, 248, 0.08);
+}
+
+.network-row-link {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-right: 3px;
+  border-radius: 5px;
+  color: var(--md-dim);
+  text-decoration: none;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.network-row-link:hover {
+  background: rgba(138, 180, 248, 0.12);
+  color: var(--md-primary-strong);
+}
+
+.network-row-link:focus-visible {
+  outline: 1px solid var(--md-primary);
+  outline-offset: 1px;
+}
+
+.network-row-link-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .network-dot {
@@ -1199,32 +1242,45 @@ main.container.network-container {
   color: var(--md-text);
 }
 
-.network-facts {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-  padding: 9px 0;
+.network-stats {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
   border-top: 1px solid var(--md-border);
   border-bottom: 1px solid var(--md-border);
 }
 
-.network-facts div {
+.network-stat {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
-.network-facts dt {
-  margin: 0;
-  color: var(--md-muted);
-  font-size: 11px;
+.network-stat + .network-stat {
+  padding-left: 10px;
+  border-left: 1px solid var(--md-border);
 }
 
-.network-facts dd {
-  margin: 0;
+.network-stat-value {
+  overflow: hidden;
   color: var(--md-text);
-  font-size: 12px;
-  text-align: right;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-stat-label {
+  overflow: hidden;
+  color: var(--md-dim);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .network-external {

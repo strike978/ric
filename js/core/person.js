@@ -53,3 +53,10 @@ export function profileUrl(ownerProfileId, profileId) {
   return 'https://you.23andme.com/p/' + encodeURIComponent(ownerProfileId)
     + '/profile/' + encodeURIComponent(profileId) + '/';
 }
+
+// The signed-in profile's own home page.
+export function ownProfileUrl(profileId) {
+  if (!profileId) return null;
+
+  return 'https://you.23andme.com/p/' + encodeURIComponent(profileId) + '/';
+}

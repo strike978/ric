@@ -14,7 +14,7 @@
 
 import { networkState as state } from '../core/state.js';
 import { getProfileRelativesInCommon, getSavedRelatives } from '../data/db.js';
-import { initialsOf, profileUrl } from '../core/person.js';
+import { initialsOf, ownProfileUrl, profileUrl } from '../core/person.js';
 import {
   cmFromProportion,
   ibdIndices,
@@ -477,23 +477,19 @@ function relationshipOf(value) {
   return label === '—' ? '' : label;
 }
 
+// Name and relationship only; shared cM, segments, and link count sit in the
+// stat strip below so the header stays short.
 function nodeSubtitle(node) {
   if (!node || node.kind === 'owner') return 'Profile';
 
   if (node.kind === 'match') {
-    const cM = cmFromProportion(node.person.ibd_proportion);
     return [
       'Common match',
       relationshipOf(node.person.predicted_relationship_id),
-      cM === null ? '' : cM + ' cM with profile',
     ].filter(Boolean).join(' · ');
   }
 
-  const cM = cmFromProportion(node.person.ibd_proportion);
-  return [
-    relationshipOf(node.person.predicted_relationship_id),
-    cM === null ? '' : cM + ' cM',
-  ].filter(Boolean).join(' · ') || 'Relative';
+  return relationshipOf(node.person.predicted_relationship_id) || 'Relative';
 }
 
 // Shared cM for an edge, ready for display.
@@ -1007,6 +1003,10 @@ function updateTooltip(node, point) {
 
   const connections = (state.adjacency.get(node.id) || []).length;
   const parts = [nodeSubtitle(node)];
+  if (node.kind !== 'owner') {
+    const cM = cmFromProportion(node.person.ibd_proportion);
+    if (cM !== null) parts.push(cM + ' cM with profile');
+  }
   if (node.kind === 'relative') parts.push(connections + (connections === 1 ? ' link' : ' links'));
 
   tooltip.replaceChildren(
@@ -1297,10 +1297,46 @@ async function loadNetwork() {
 
 /* ---------- View ---------- */
 
+function externalIcon() {
+  return m('svg.network-row-link-icon', {
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': '2',
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+    'aria-hidden': 'true',
+  }, [
+    m('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+    m('path', { d: 'M15 3h6v6' }),
+    m('path', { d: 'M10 14 21 3' }),
+  ]);
+}
+
+// A list row selects the person in the graph, with a separate link to their
+// 23andMe profile. The link sits outside the button because an anchor cannot
+// be nested inside one.
+function rowShell(node, button) {
+  const url = node.kind === 'owner' ? null : profileUrl(profileId, node.id);
+  if (!url) return button;
+
+  const label = 'Open ' + nodeName(node) + ' on 23andMe';
+  return m('div.network-row-wrap', [
+    button,
+    m('a.network-row-link', {
+      href: url,
+      target: '_blank',
+      rel: 'noopener noreferrer',
+      title: label,
+      'aria-label': label,
+    }, externalIcon()),
+  ]);
+}
+
 function personRow(node, edge) {
   const cM = cmFromProportion(edge.weight);
 
-  return m('button.network-row', {
+  return rowShell(node, m('button.network-row', {
     type: 'button',
     onclick: () => selectNode(node, true),
   }, [
@@ -1312,20 +1348,13 @@ function personRow(node, edge) {
         cM === null ? '' : cM + ' cM',
       ].filter(Boolean).join(' · ')),
     ]),
-    m('span.network-row-kind', {
-      title: edge.kind === 'shared'
-        ? (edge.confirmed
-          ? 'Seen from both directions'
-          : 'Only seen from one comparison')
-        : undefined,
-    }, edge.kind === 'owner' ? '' : edge.confirmed ? 'shared' : 'one-sided'),
-  ]);
+  ]));
 }
 
 function matchRow(node) {
   const cM = cmFromProportion(node.person.ibd_proportion);
 
-  return m('button.network-row', {
+  return rowShell(node, m('button.network-row', {
     type: 'button',
     onclick: () => selectNode(node, true),
   }, [
@@ -1338,7 +1367,7 @@ function matchRow(node) {
       ].filter(Boolean).join(' · ')),
     ]),
     m('span.network-row-kind', 'match'),
-  ]);
+  ]));
 }
 
 function overviewPanel() {
@@ -1406,11 +1435,36 @@ function overviewPanel() {
   ];
 }
 
+function stat(value, label) {
+  return m('div.network-stat', { title: value + ' ' + label }, [
+    m('span.network-stat-value', value),
+    m('span.network-stat-label', label),
+  ]);
+}
+
+function detailStats(node, connections) {
+  const count = connections === 1 ? 'link' : 'links';
+  if (node.kind === 'owner') return m('div.network-stats', [stat(connections, count)]);
+
+  const cM = cmFromProportion(node.person.ibd_proportion);
+  const segments = numberValue(node.person.num_segments);
+
+  return m('div.network-stats', [
+    stat(cM === null ? '—' : cM + ' cM', 'shared DNA'),
+    stat(segments === null ? '—' : segments, segments === 1 ? 'segment' : 'segments'),
+    stat(connections, count),
+  ]);
+}
+
 function detailPanel(node) {
   const isOwner = node.kind === 'owner';
-  const links = state.adjacency.get(node.id) || [];
+  // The profile sits at the centre of every relative's links, but it is not
+  // one of that relative's connected relatives. Its direct sharing is already
+  // shown in the stat strip above.
+  const links = (state.adjacency.get(node.id) || [])
+    .filter(({ node: other }) => isOwner || other.id !== OWNER_ID);
   const shown = links.slice(0, 80);
-  const url = isOwner ? null : profileUrl(profileId, node.id);
+  const url = isOwner ? ownProfileUrl(profileId) : profileUrl(profileId, node.id);
 
   return [
     m('div.network-detail-head', [
@@ -1427,23 +1481,7 @@ function detailPanel(node) {
       }, '×'),
     ]),
 
-    m('dl.network-facts', [
-      isOwner ? null : m('div', [
-        m('dt', 'Shared with profile'),
-        m('dd', [
-          cmFromProportion(node.person.ibd_proportion) === null
-            ? '—'
-            : cmFromProportion(node.person.ibd_proportion) + ' cM',
-          numberValue(node.person.num_segments) === null
-            ? ''
-            : ' · ' + numberValue(node.person.num_segments) + ' segments',
-        ].join('')),
-      ]),
-      m('div', [
-        m('dt', 'Connections'),
-        m('dd', links.length + (links.length === 1 ? ' relative' : ' relatives')),
-      ]),
-    ]),
+    detailStats(node, links.length),
 
     links.length
       ? [
@@ -1453,13 +1491,15 @@ function detailPanel(node) {
             ? m('p.network-panel-empty', '+' + (links.length - shown.length) + ' more connections')
             : null,
         ]
-      : m('p.network-panel-empty', 'No saved connections for this person yet.'),
+      : m('p.network-panel-empty', isOwner
+        ? 'No saved connections for this person yet.'
+        : 'No links to other relatives yet.'),
 
     url ? m('a.network-external', {
       href: url,
       target: '_blank',
       rel: 'noopener noreferrer',
-    }, 'Open on 23andMe ↗') : null,
+    }, isOwner ? 'Open profile on 23andMe ↗' : 'Open on 23andMe ↗') : null,
   ];
 }
 
