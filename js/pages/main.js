@@ -1049,6 +1049,8 @@ const App = {
         actions: [
           state.selectedId ? m('a.btn-flat.waves-effect', {
             href: networkUrl(),
+            target: '_blank',
+            rel: 'noopener noreferrer',
             title: 'View this profile’s relatives as a shared DNA network',
           }, 'Shared DNA') : null,
           dataMenu({

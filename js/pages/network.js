@@ -1376,8 +1376,41 @@ async function loadNetwork() {
       getProfileRelativesInCommon(profileId),
     ]);
 
-    rawData = { relatives, pairs };
-    buildGraph(relatives, pairs, state.includeSharedMatches, state.filters);
+    const savedIds = new Set(relatives
+      .map((relative) => String((relative && relative.relative_profile_id) || '').trim())
+      .filter(Boolean));
+
+    // A relative belongs in the graph only when its relatives-in-common list
+    // was fetched and actually contains matches.
+    const comparedIds = new Set();
+    for (const pair of pairs) {
+      if (!pair || !Array.isArray(pair.relatives) || pair.relatives.length === 0) continue;
+
+      const id = String(pair.relative_profile_id || '').trim();
+      if (id) comparedIds.add(id);
+    }
+
+    const visibleRelatives = relatives.filter((relative) => {
+      const id = String((relative && relative.relative_profile_id) || '').trim();
+      return id && comparedIds.has(id);
+    });
+
+    // Saved relatives without data must not reappear as common-match nodes.
+    const hiddenIds = new Set([...savedIds].filter((id) => !comparedIds.has(id)));
+    const visiblePairs = pairs.map((pair) => {
+      if (!pair || !Array.isArray(pair.relatives)) return pair;
+
+      return {
+        ...pair,
+        relatives: pair.relatives.filter((row) => {
+          const id = String((row && row.profile_id) || '').trim();
+          return !hiddenIds.has(id);
+        }),
+      };
+    });
+
+    rawData = { relatives: visibleRelatives, pairs: visiblePairs };
+    buildGraph(visibleRelatives, visiblePairs, state.includeSharedMatches, state.filters);
     if (initialRelativeId && nodeById.has(initialRelativeId)) {
       state.selectedId = initialRelativeId;
     }
@@ -1385,6 +1418,8 @@ async function loadNetwork() {
 
     if (relatives.length === 0) {
       state.notice = 'No saved relatives for this profile yet. Load relatives on the relatives page first.';
+    } else if (visibleRelatives.length === 0) {
+      state.notice = 'No relatives with saved relatives-in-common matches yet. Use Start on the relatives page first.';
     } else {
       state.notice = '';
     }
