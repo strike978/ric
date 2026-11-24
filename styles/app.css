@@ -898,6 +898,137 @@ table th {
   box-shadow: none;
 }
 
+/* Main page relatives filter bar */
+.relatives-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--md-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.relatives-filter-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relatives-filter-name {
+  flex: 1 1 220px;
+  max-width: 340px;
+}
+
+.relatives-filter-label {
+  color: var(--md-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* Keep mtDNA and Y-DNA in their usual case. */
+.relatives-filter-label-haplo {
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.relatives-filter-input,
+.relatives-filter-haplo-search,
+.relatives-filter-select.browser-default {
+  height: 36px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--md-border);
+  border-radius: 8px;
+  background: var(--md-surface-2);
+  color: var(--md-text);
+  font-family: var(--sans);
+  font-size: 13px;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+.relatives-filter-input {
+  width: 100%;
+  min-width: 180px;
+}
+
+.relatives-filter-input::placeholder,
+.relatives-filter-haplo-search::placeholder {
+  color: var(--md-dim);
+}
+
+.relatives-filter-input:focus,
+.relatives-filter-haplo-search:focus,
+.relatives-filter-select.browser-default:focus {
+  border-color: var(--md-primary);
+  outline: none;
+  box-shadow: none;
+}
+
+.relatives-filter-select.browser-default {
+  width: auto;
+  min-width: 132px;
+  max-width: 190px;
+  cursor: pointer;
+}
+
+.relatives-filter-haplo-row {
+  display: flex;
+  gap: 6px;
+}
+
+.relatives-filter-haplo-search {
+  width: 116px;
+  flex: 1 1 100px;
+  min-width: 0;
+}
+
+.relatives-filter-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  margin-left: auto;
+}
+
+.relatives-filter-count {
+  color: var(--md-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.relatives-filter-clear {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--md-primary);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.relatives-filter-clear:hover:not(:disabled),
+.relatives-filter-clear:focus-visible {
+  background: rgba(138, 180, 248, 0.12);
+  outline: none;
+}
+
+.relatives-filter-clear:disabled {
+  color: var(--md-dim);
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Shared DNA network */
 main.container.network-container {
   max-width: 1180px;
@@ -1215,32 +1346,6 @@ select.network-filter-haplo:focus {
   box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.16);
 }
 
-.network-filter-haplo-load-btn {
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px dashed var(--md-border);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--md-primary);
-  font-family: var(--sans);
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.network-filter-haplo-load-btn:hover:not(:disabled),
-.network-filter-haplo-load-btn:focus-visible {
-  border-color: rgba(138, 180, 248, 0.55);
-  background: rgba(138, 180, 248, 0.08);
-  outline: none;
-}
-
-.network-filter-haplo-load-btn:disabled {
-  color: var(--md-dim);
-  opacity: 0.7;
-  cursor: default;
-}
-
 .network-filter-unit {
   padding-left: 3px;
   color: var(--md-dim);
@@ -1383,6 +1488,24 @@ select.network-filter-haplo:focus {
   margin: 2px 0 0;
   color: var(--md-muted);
   font-size: 11.5px;
+}
+
+.network-detail-name {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.network-detail-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-detail-name .network-name-link {
+  margin-right: 0;
 }
 
 .network-help,
@@ -1546,6 +1669,7 @@ select.network-filter-haplo:focus {
 }
 
 .network-detail-title {
+  flex: 1;
   min-width: 0;
 }
 
@@ -1606,18 +1730,6 @@ select.network-filter-haplo:focus {
   text-transform: uppercase;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.network-external {
-  margin-top: auto;
-  color: var(--md-primary);
-  font-size: 12px;
-  text-decoration: none;
-}
-
-.network-external:hover,
-.network-external:focus {
-  text-decoration: underline;
 }
 
 .network-legend {

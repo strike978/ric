@@ -25,6 +25,14 @@ one's relatives-in-common list.
    action. Click the avatar or name to open the relative's profile on 23andMe. If you have loaded this
    profile before, any newly added relatives are fetched automatically and
    added to the saved comparisons of the people they match.
+
+   Above the table, the **Full name or last name** search and the **mtDNA** /
+   **Y-DNA** searches filter which relatives are shown; **Clear** resets all
+   three. Type a full name or a last name; a single word searches last names. Type a haplogroup
+   prefix to search (for example, `C1` matches `C1a` but not `J1c1c`), or pick a
+   value from the menu. The haplogroup menus fill in with the values fetched
+   during a **Start** run (or carried over from saved data). Filtering only
+   changes the table, not what **Start** fetches.
 4. Click **Start** to load comparisons for the loaded
    relatives. The **Delay (seconds)** and **Retry delay (seconds)** fields set
    the gap between requests (default 2 seconds) and the wait after a failure
@@ -53,7 +61,10 @@ one's relatives-in-common list.
    directions; dotted purple edges are only seen from one direction. Drag to
    pan, scroll to zoom, drag a node to pin it, and click a node to see its
    connections in the side panel. By default only the strongest shared links are
-   drawn; hover or click a relative to see all of its connections.
+   drawn; hover or click a relative to see all of its connections. The **Filter**
+   menu narrows the graph by shared cM or haplogroup; its **Full name or last
+   name** search only filters the side lists and leaves the graph itself
+   unchanged.
 8. Click **Data → Export JSON** in the top-right toolbar to save everything in
    the local database to a `.json` file.
 9. Click **Data → Import JSON** to load a `.json` file made by **Export**. This

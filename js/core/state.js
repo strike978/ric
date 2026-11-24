@@ -12,6 +12,11 @@ export const mainState = {
   selectedId: '',
   relatives: [],
   relativesPhase: 'idle',    // idle | loading | ready | error
+  filters: {                 // table filter, applied to the loaded relatives
+    name: '',                // full name or last name search text
+    maternal: '',            // mtDNA haplogroup search text
+    paternal: '',            // Y-DNA haplogroup search text
+  },
   comparisons: {},           // relative id -> loading | retrying | ready
   comparisonsRunning: false,
   comparisonGapMs: 2000,     // delay between relatives-in-common requests

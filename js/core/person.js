@@ -1,8 +1,9 @@
 /*
  * Person display helpers
  *
- * Shared by the main relatives table and the relatives-in-common table. The
- * avatar uses profile_image_url when available and falls back to initials.
+ * Shared by the main relatives table, the relatives-in-common table, and the
+ * shared DNA network. The avatar uses profile_image_url when available and
+ * falls back to initials.
  */
 
 export function displayName(person) {
@@ -12,6 +13,30 @@ export function displayName(person) {
   ].filter(Boolean).join(' ');
 
   return name || person.initials || '—';
+}
+
+// True when the search text matches the person's full name or last name. A
+// single-word search is treated as a last name, so typing a first name alone
+// does not match. Used by the name filters on the relatives and shared DNA
+// pages.
+export function nameMatchesSearch(person, filter) {
+  const needle = String(filter || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  if (!needle) return true;
+
+  const first = (person && (person.first_name || person.first_initial)) || '';
+  const last = (person && (person.last_name || person.last_initial)) || '';
+  const full = [first, last].filter(Boolean).join(' ');
+  const lastOnly = String(last || '');
+
+  const normalize = (value) => String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+
+  // More than one word means a full-name search; one word is a last-name
+  // search.
+  const haystack = needle.includes(' ') ? normalize(full) : normalize(lastOnly);
+  return haystack.includes(needle);
 }
 
 export function initialsOf(person) {

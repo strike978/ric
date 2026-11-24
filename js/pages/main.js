@@ -36,7 +36,7 @@ import {
   validateJsonProfile,
 } from '../data/db.js';
 import { readJsonProfiles } from '../data/reader.js';
-import { avatar, displayName, profileUrl } from '../core/person.js';
+import { avatar, displayName, nameMatchesSearch, profileUrl } from '../core/person.js';
 import { haplogroupUrl, pickHaplogroups } from '../core/haplogroups.js';
 import { mirroredCommonRelative, sharedDnaLabel } from '../core/dna.js';
 import { labelName } from '../core/preferences.js';
@@ -721,6 +721,7 @@ async function deleteData() {
     state.selectedId = '';
     state.relatives = [];
     state.relativesPhase = 'idle';
+    clearRelativeFilters();
     state.comparisons = {};
     state.comparisonProgress = null;
     state.noticeLink = '';
@@ -767,6 +768,7 @@ async function clearProfileData() {
     state.selectedId = '';
     state.relatives = [];
     state.relativesPhase = 'idle';
+    clearRelativeFilters();
     state.comparisons = {};
     state.comparisonProgress = null;
     state.notice = 'Deleted saved data for ' + name + '.';
@@ -1001,16 +1003,178 @@ function actionFor(relative) {
 
 // mtDNA / Y-DNA values for a saved relative. Females have no Y chromosome, so
 // their row never shows a paternal haplogroup, even if one was saved by mistake.
+function isFemaleRelative(relative) {
+  const sex = String((relative && relative.sex) || '').trim().toLowerCase();
+  return sex === 'female' || sex === 'f';
+}
+
 function relativeHaplogroups(relative) {
   const groups = (relative && relative.haplogroups) || {};
-  const sex = String((relative && relative.sex) || '').trim().toLowerCase();
-  const female = sex === 'female' || sex === 'f';
+  const female = isFemaleRelative(relative);
 
   return {
     maternal: groups.maternal || '',
     paternal: female ? '' : (groups.paternal || ''),
     female,
   };
+}
+
+/* ---------- Table filters ---------- */
+
+function haplogroupMatches(value, filter) {
+  const needle = String(filter || '').trim().toLowerCase();
+  if (!needle) return true;
+
+  return String(value || '').trim().toLowerCase().startsWith(needle);
+}
+
+function relativeFiltersActive(filters = state.filters) {
+  return Boolean(
+    String(filters.name || '').trim()
+    || String(filters.maternal || '').trim()
+    || String(filters.paternal || '').trim(),
+  );
+}
+
+// A relative passes when the typed name appears in their full name or last
+// name, and their mtDNA / Y-DNA haplogroups begin with the typed search text.
+// Empty fields impose no constraint.
+function passesRelativeFilters(relative, filters = state.filters) {
+  if (!nameMatchesSearch(relative, filters.name)) return false;
+
+  const maternal = String(filters.maternal || '').trim();
+  const paternal = String(filters.paternal || '').trim();
+  if (maternal || paternal) {
+    // Females have no Y chromosome, so a Y-DNA filter never matches them.
+    const groups = relativeHaplogroups(relative);
+    if (!haplogroupMatches(groups.maternal, maternal)) return false;
+    if (!haplogroupMatches(groups.paternal, paternal)) return false;
+  }
+
+  return true;
+}
+
+function clearRelativeFilters() {
+  state.filters.name = '';
+  state.filters.maternal = '';
+  state.filters.paternal = '';
+}
+
+// Haplogroups seen among the loaded relatives, for the filter menus.
+function haplogroupOptions(kind) {
+  const values = new Set();
+
+  for (const relative of state.relatives) {
+    if (kind === 'paternal' && isFemaleRelative(relative)) continue;
+
+    const groups = relative && relative.haplogroups;
+    const value = groups && groups[kind];
+    if (value) values.add(String(value).trim());
+  }
+
+  return [...values].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+function haploFilterSelect(kind, placeholder) {
+  const value = state.filters[kind] || '';
+  const needle = String(value).trim().toLowerCase();
+  const all = haplogroupOptions(kind);
+
+  // Narrow the menu to values beginning with the search text. The selected
+  // value stays visible even when it is only a partial search.
+  let options = needle
+    ? all.filter((option) => option.toLowerCase().startsWith(needle))
+    : all;
+
+  if (value && !options.includes(value)) options = [value, ...options];
+
+  return m('select.relatives-filter-select.browser-default', {
+    value,
+    'aria-label': kind === 'maternal'
+      ? 'Filter relatives by mtDNA haplogroup'
+      : 'Filter relatives by Y-DNA haplogroup',
+    onchange: (event) => {
+      state.filters[kind] = event.target.value;
+      m.redraw.sync();
+    },
+  }, [
+    m('option', { key: 'any', value: '', selected: value === '' }, placeholder),
+    ...options.map((option) => m('option', {
+      key: option,
+      value: option,
+      selected: option === value,
+    }, option)),
+  ]);
+}
+
+// Typing here searches the table at the same time as it narrows the menu.
+function haploSearchInput(kind, placeholder, label) {
+  return m('input.relatives-filter-haplo-search.browser-default', {
+    type: 'search',
+    placeholder,
+    value: state.filters[kind] || '',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    'aria-label': label,
+    oninput: (event) => {
+      state.filters[kind] = event.target.value;
+      m.redraw.sync();
+    },
+  });
+}
+
+function relativeFilterBar() {
+  if (state.relativesPhase !== 'ready' || state.relatives.length === 0) return null;
+
+  const filtersOn = relativeFiltersActive();
+  const visibleCount = state.relatives
+    .filter((relative) => passesRelativeFilters(relative)).length;
+
+  return m('div.relatives-filters', [
+    m('label.relatives-filter-field.relatives-filter-name', [
+      m('span.relatives-filter-label', 'Full name or last name'),
+      m('input.relatives-filter-input.browser-default', {
+        type: 'search',
+        placeholder: 'Search full name or last name',
+        value: state.filters.name,
+        autocomplete: 'off',
+        spellcheck: 'false',
+        'aria-label': 'Filter relatives by full name or last name',
+        oninput: (event) => {
+          state.filters.name = event.target.value;
+          m.redraw.sync();
+        },
+      }),
+    ]),
+    m('div.relatives-filter-field', [
+      m('span.relatives-filter-label.relatives-filter-label-haplo', 'mtDNA'),
+      m('div.relatives-filter-haplo-row', [
+        haploSearchInput('maternal', 'Search mtDNA', 'Search mtDNA haplogroups'),
+        haploFilterSelect('maternal', 'Any mtDNA'),
+      ]),
+    ]),
+    m('div.relatives-filter-field', [
+      m('span.relatives-filter-label.relatives-filter-label-haplo', 'Y-DNA'),
+      m('div.relatives-filter-haplo-row', [
+        haploSearchInput('paternal', 'Search Y-DNA', 'Search Y-DNA haplogroups'),
+        haploFilterSelect('paternal', 'Any Y-DNA'),
+      ]),
+    ]),
+    m('div.relatives-filter-footer', [
+      m('span.relatives-filter-count', { 'aria-live': 'polite' }, filtersOn
+        ? visibleCount + ' of ' + state.relatives.length
+          + (state.relatives.length === 1 ? ' relative' : ' relatives')
+        : state.relatives.length + (state.relatives.length === 1 ? ' relative' : ' relatives')),
+      m('button.relatives-filter-clear', {
+        type: 'button',
+        disabled: !filtersOn,
+        onclick: () => {
+          clearRelativeFilters();
+          m.redraw.sync();
+        },
+      }, 'Clear'),
+    ]),
+  ]);
 }
 
 // 23andMe uses is_sharing on the relatives list; is_open_sharing appears in
@@ -1042,6 +1206,9 @@ const App = {
           ? ' · about ' + formatRemaining(progress.remainingMs) + ' left'
           : ' · finishing…')
       : '';
+
+    const visibleRelatives = state.relatives
+      .filter((relative) => passesRelativeFilters(relative));
 
     return [
       appHeader({
@@ -1079,6 +1246,7 @@ const App = {
                   state.selectedId = event.target.value;
                   state.relatives = [];
                   state.relativesPhase = 'idle';
+                  clearRelativeFilters();
                   cancelComparisons();
                   state.comparisons = {};
                   state.notice = '';
@@ -1165,6 +1333,7 @@ const App = {
               || state.relatives.length
               ? 'output' : 'output hidden',
           }, [
+            relativeFilterBar(),
             m('div.table-wrap', m('table.relatives-table.striped.highlight', [
               m('thead', m('tr', [
                 m('th', 'Relative'),
@@ -1180,7 +1349,7 @@ const App = {
                     ' Loading relatives…',
                   ]))
                 : state.relatives.length
-                  ? state.relatives.map((relative, index) => {
+                  ? visibleRelatives.map((relative, index) => {
                       const personUrl = profileUrl(state.selectedId, relative.relative_profile_id);
                       const person = [
                         avatar(relative),
@@ -1206,7 +1375,11 @@ const App = {
                       ]);
                     })
                   : m('tr', m('td.empty', { colspan: 6 },
-                      state.relativesPhase === 'error' ? 'Request failed' : 'No relatives'))),
+                      state.relativesPhase === 'error'
+                        ? 'Request failed'
+                        : state.relatives.length
+                          ? 'No relatives match these filters.'
+                          : 'No relatives'))),
             ])),
           ]),
           ]),
