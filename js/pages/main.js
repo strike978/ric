@@ -49,6 +49,15 @@ let comparisonXhr = null;
 let relativesSeq = 0;
 let comparisonsSeq = 0;
 
+// The relatives page can be opened with ?profile=<id> to select that profile.
+function requestedProfileId() {
+  try {
+    return new URLSearchParams(location.search).get('profile') || '';
+  } catch {
+    return '';
+  }
+}
+
 /* ---------- Response shapes ---------- */
 
 function pickRelatives(payload) {
@@ -191,7 +200,10 @@ async function loadProfiles() {
 
     state.noticeLink = '';
     state.profiles = result.data.profiles;
-    state.selectedId = '';
+    const wanted = requestedProfileId();
+    state.selectedId = result.data.profiles.some((profile) => String(profile.id) === wanted)
+      ? wanted
+      : '';
     state.phase = 'ready';
   } catch (err) {
     console.warn('Could not load profiles:', err);
@@ -1402,4 +1414,6 @@ const App = {
 };
 
 m.mount(document.getElementById('app'), App);
-loadProfiles();
+loadProfiles().then(() => {
+  if (state.selectedId) loadRelatives();
+});

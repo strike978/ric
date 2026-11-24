@@ -239,7 +239,10 @@ function buildGraph(relatives, pairs, includeSharedMatches = true, filters = sta
     if (!id || seen.has(id)) continue;
 
     const ibd = numberValue(relative.ibd_proportion);
-    if (!passesFilters(relative, ibd, filters, false)) continue;
+    // Keep the open relative in the graph so the sidebar does not jump back to
+    // the profile overview when a filter happens to exclude them.
+    const selected = state.selectedId === id;
+    if (!selected && !passesFilters(relative, ibd, filters, false)) continue;
 
     seen.add(id);
     const old = previous.get(id);
@@ -419,7 +422,9 @@ function buildGraph(relatives, pairs, includeSharedMatches = true, filters = sta
         num_segments: average(ownerSegments),
       };
       const ibd = numberValue(person.ibd_proportion);
-      if (!passesFilters(person, ibd, filters, false)) continue;
+      // Same as saved relatives: keep the selected match open across filters.
+      const selected = state.selectedId === stat.id;
+      if (!selected && !passesFilters(person, ibd, filters, false)) continue;
 
       const old = previous.get(stat.id);
       if (old) preserved.add(stat.id);
@@ -514,7 +519,9 @@ function buildGraph(relatives, pairs, includeSharedMatches = true, filters = sta
   state.nodes = nodes;
   state.edges = edges;
   state.adjacency = adjacency;
-  state.selectedId = '';
+  // Keep the selected person open when they survive the new filters, so their
+  // connected-relatives list can show the filtered result.
+  if (state.selectedId && !byId.has(state.selectedId)) state.selectedId = '';
   state.stats = {
     relatives: savedRelativeNodes.length,
     totalRelatives: relatives.length,
@@ -1099,23 +1106,26 @@ function hideTooltip() {
 }
 
 function selectNode(node, center = false) {
+  const previous = state.selectedId ? nodeById.get(state.selectedId) : null;
   state.selectedId = node ? node.id : '';
   if (node && center) {
     view.camera.x = node.x;
     view.camera.y = node.y;
     view.camera.touched = true;
   }
+
+  // A relative that does not match the active filters is kept in the graph
+  // while its details are open. Closing it rebuilds the graph so it disappears
+  // with the other filtered-out relatives.
+  if (!node && previous && previous.kind !== 'owner'
+    && !passesFilters(previous.person, previous.ibd, state.filters, false)) {
+    buildGraph(rawData.relatives, rawData.pairs, state.includeSharedMatches, state.filters);
+    hideTooltip();
+    startSimulation();
+  }
+
   m.redraw.sync();
   draw();
-}
-
-function toggleSharedMatches() {
-  state.includeSharedMatches = !state.includeSharedMatches;
-  state.selectedId = '';
-  buildGraph(rawData.relatives, rawData.pairs, state.includeSharedMatches, state.filters);
-  hideTooltip();
-  m.redraw.sync();
-  startSimulation();
 }
 
 /* ---------- Filtering ---------- */
@@ -1625,7 +1635,10 @@ function detailPanel(node) {
   // shown in the stat strip above.
   const links = (state.adjacency.get(node.id) || [])
     .filter(({ node: other }) => isOwner || other.id !== OWNER_ID);
-  const shown = links.slice(0, 80);
+  const nameFilter = String(state.filters.name || '').trim();
+  const visibleLinks = links.filter(({ node: other }) =>
+    nameMatchesSearch(other.person, state.filters.name));
+  const shown = visibleLinks.slice(0, 80);
   const url = isOwner ? ownProfileUrl(profileId) : profileUrl(profileId, node.id);
   const linkLabel = isOwner
     ? 'Open profile on 23andMe'
@@ -1659,23 +1672,33 @@ function detailPanel(node) {
 
     detailStats(node, links.length),
 
-    links.length
+    visibleLinks.length
       ? [
           m('h3.network-section-title', isOwner ? 'Relatives' : 'Connected relatives'),
           m('div.network-list', shown.map(({ node: other, edge }) => personRow(other, edge))),
-          links.length > shown.length
-            ? m('p.network-panel-empty', '+' + (links.length - shown.length) + ' more connections')
+          visibleLinks.length > shown.length
+            ? m('p.network-panel-empty', '+' + (visibleLinks.length - shown.length) + ' more connections')
             : null,
         ]
-      : m('p.network-panel-empty', isOwner
-        ? 'No saved connections for this person yet.'
-        : 'No links to other relatives yet.'),
+      : m('p.network-panel-empty', links.length && nameFilter
+        ? 'No connected relatives match this name.'
+        : nameFilter || graphFiltersActive()
+          ? 'No connected relatives match these filters.'
+          : isOwner
+            ? 'No saved connections for this person yet.'
+            : 'No links to other relatives yet.'),
   ];
 }
 
 function networkSidebar() {
   const node = selectedNode();
   return m('aside.network-sidebar', node ? detailPanel(node) : overviewPanel());
+}
+
+// The relatives page for this network's profile.
+function relativesUrl() {
+  const base = pageUrl('index.html');
+  return profileId ? base + '?profile=' + encodeURIComponent(profileId) : base;
 }
 
 function searchIcon() {
@@ -1816,12 +1839,12 @@ function filterMenu() {
   const active = filtersActive();
   const activeCount = activeFilterCount();
   const total = state.stats.totalRelatives;
-  // The name search only narrows the side lists, so count the relatives that
-  // remain in those lists.
-  const shown = state.nodes
-    .filter((node) => node.kind === 'relative'
-      && nameMatchesSearch(node.person, state.filters.name))
-    .length;
+  // Count the relatives that actually match every filter, leaving out the
+  // selected relative that is kept in the graph for context.
+  const shown = (rawData.relatives || []).filter((relative) => {
+    const ibd = numberValue(relative.ibd_proportion);
+    return passesFilters(relative, ibd, state.filters, true);
+  }).length;
 
   return m('details.network-filter-menu', {
     oncreate: () => {
@@ -1914,7 +1937,7 @@ const App = {
         subtitle,
         actions: [
           m('a.btn-flat.waves-effect', {
-            href: pageUrl('index.html'),
+            href: relativesUrl(),
           }, 'Back to relatives'),
         ],
       }),
@@ -1932,16 +1955,13 @@ const App = {
               m('span.network-hint', 'Drag to pan · scroll to zoom · hover for links'),
             ]),
             m('div.network-tools', [
-              filterMenu(),
-              m('button', {
+              m('button.btn-flat.btn-small.waves-effect', {
                 type: 'button',
-                class: state.includeSharedMatches
-                  ? 'btn-flat btn-small waves-effect active'
-                  : 'btn-flat btn-small waves-effect',
-                'aria-pressed': state.includeSharedMatches ? 'true' : 'false',
-                title: 'Include shared matches seen under at least two relatives',
-                onclick: toggleSharedMatches,
-              }, 'Shared matches'),
+                disabled: !state.selectedId,
+                title: 'Back to the profile overview',
+                onclick: () => selectNode(null),
+              }, '← Back'),
+              filterMenu(),
               m('button.btn-flat.btn-small.waves-effect', {
                 type: 'button',
                 onclick: fitView,

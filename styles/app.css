@@ -1137,6 +1137,13 @@ main.container.network-container {
   color: var(--md-text);
 }
 
+.network-tools .btn-flat:disabled {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--md-muted);
+  opacity: 0.45;
+  cursor: default;
+}
+
 .network-tools .btn-flat.active {
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.35);

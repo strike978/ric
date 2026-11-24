@@ -54,8 +54,9 @@ one's relatives-in-common list.
    profile again reloads its relatives.
 6. Click **Open** to see the relatives in common for that pair.
 7. Click **Shared DNA** in the top-right toolbar to open the **Shared DNA
-   Network**. **Shared matches** is on by default; it adds matches seen under at
-   least two relatives. Turn it off to show only direct relatives.
+   Network**. Matches seen under at least two relatives are included in the
+   graph. **← Back** returns to the profile overview; **Back to relatives** in
+   the toolbar returns to that profile's relatives page.
 
    The profile sits in the middle; blue edges show each relative's direct
    sharing with the profile. Dashed purple edges are links seen from both
@@ -65,7 +66,8 @@ one's relatives-in-common list.
    drawn; hover or click a relative to see all of its connections. The **Filter**
    menu narrows the graph by shared cM or haplogroup; its **Full name or last
    name** search only filters the side lists and leaves the graph itself
-   unchanged.
+   unchanged. A relative that is open in the side panel stays visible while you
+   filter, so its connected-relatives list remains available.
 8. Click **Data → Export JSON** in the top-right toolbar to save everything in
    the local database to a `.json` file.
 9. Click **Data → Import JSON** to load a `.json` file made by **Export**. This
@@ -130,8 +132,8 @@ to the comparison rows.
   across the lists it appears in, falling back to the column order learned from
   saved relatives. When both directions are available their weights are
   averaged and the link is dashed/confirmed; otherwise it is dotted and marked
-  one-sided. **Shared matches** adds only matches seen under at least two
-  relatives. The overview draws the 16 strongest shared links; hovering or
+  one-sided. Shared matches seen under at least two relatives are included.
+  The overview draws the 16 strongest shared links; hovering or
   selecting a node reveals all of its links.
 - Segment counts are displayed in the tables and details, but they are not used
   as edge weights.

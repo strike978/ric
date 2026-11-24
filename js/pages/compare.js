@@ -383,7 +383,8 @@ const App = {
             title: 'View all relatives as a shared DNA network',
           }, 'Shared DNA'),
           m('a.btn-flat.waves-effect', {
-            href: pageUrl('index.html'),
+            href: pageUrl('index.html')
+              + (profileId ? '?profile=' + encodeURIComponent(profileId) : ''),
           }, 'Back to relatives'),
         ],
       }),
