@@ -28,7 +28,8 @@ one's relatives-in-common list.
 
    Above the table, the **Full name or last name** search and the **mtDNA** /
    **Y-DNA** searches filter which relatives are shown; **Clear** resets all
-   three. Type a full name or a last name; a single word searches last names. Type a haplogroup
+   three. Name searches match from the start of the full name or last name; a
+   single word searches last names. Type a haplogroup
    prefix to search (for example, `C1` matches `C1a` but not `J1c1c`), or pick a
    value from the menu. The haplogroup menus fill in with the values fetched
    during a **Start** run (or carried over from saved data). Filtering only

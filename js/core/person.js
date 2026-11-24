@@ -15,10 +15,10 @@ export function displayName(person) {
   return name || person.initials || '—';
 }
 
-// True when the search text matches the person's full name or last name. A
-// single-word search is treated as a last name, so typing a first name alone
-// does not match. Used by the name filters on the relatives and shared DNA
-// pages.
+// True when the search text is the start of the person's full name or last
+// name. A single-word search is treated as a last name, so typing a first name
+// alone does not match. Used by the name filters on the relatives and shared
+// DNA pages.
 export function nameMatchesSearch(person, filter) {
   const needle = String(filter || '').trim().replace(/\s+/g, ' ').toLowerCase();
   if (!needle) return true;
@@ -34,9 +34,12 @@ export function nameMatchesSearch(person, filter) {
     .toLowerCase();
 
   // More than one word means a full-name search; one word is a last-name
-  // search.
-  const haystack = needle.includes(' ') ? normalize(full) : normalize(lastOnly);
-  return haystack.includes(needle);
+  // search. Both match from the start, so "ena" does not match "Pena".
+  const candidates = needle.includes(' ')
+    ? [normalize(full), normalize(lastOnly)]
+    : [normalize(lastOnly)];
+
+  return candidates.some((value) => value.startsWith(needle));
 }
 
 export function initialsOf(person) {
