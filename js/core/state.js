@@ -36,6 +36,11 @@ export const compareState = {
   meta: '',
   relatives: [],
   sort: 'ibd:1:desc',       // ibd:N:asc | ibd:N:desc (saved only as fallback)
+  filters: {                // table filter, applied to the common relatives
+    name: '',               // full name or last name search text
+    maternal: '',           // mtDNA haplogroup search text
+    paternal: '',           // Y-DNA haplogroup search text
+  },
   loading: false,
   notice: '',
 };

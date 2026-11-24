@@ -61,7 +61,7 @@ h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
   color: var(--muted);
 }
 
-/* Comparison controls: result count and sort picker */
+/* Comparison controls: result count */
 .list-controls {
   display: flex;
   align-items: center;
@@ -70,15 +70,8 @@ h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
   flex-wrap: wrap;
 }
 
-.sort-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sort-row select {
-  width: auto;
-  max-width: 320px;
+.compare-filters {
+  margin: 12px 0;
 }
 
 /* Page layout: centered column holding one or more panels */
@@ -181,6 +174,59 @@ select:disabled { opacity: 0.6; }
   letter-spacing: 0.08em;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.relatives-table th.sortable {
+  padding: 0;
+}
+
+.relatives-table .sort-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-transform: inherit;
+  white-space: nowrap;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.relatives-table .sort-button:hover {
+  color: var(--md-text);
+}
+
+.relatives-table .sort-button:focus {
+  background: transparent;
+  outline: none;
+}
+
+.relatives-table .sort-button:focus-visible {
+  outline: 1px solid var(--md-primary);
+  outline-offset: -2px;
+}
+
+.relatives-table th[aria-sort='ascending'],
+.relatives-table th[aria-sort='descending'] {
+  background: #151b25;
+  color: var(--md-text);
+}
+
+.sort-arrow {
+  font-size: 9px;
+  opacity: 0.55;
+}
+
+.relatives-table th[aria-sort='ascending'] .sort-arrow,
+.relatives-table th[aria-sort='descending'] .sort-arrow {
+  opacity: 1;
 }
 
 .relatives-table tbody tr:last-child td { border-bottom: none; }

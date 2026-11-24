@@ -79,9 +79,15 @@ pair. For each relative in common it shows:
 
 - avatar and name (or initials when there is no photo), linked to the profile
   on 23andMe
+- mtDNA and Y-DNA haplogroups, when they were saved for that relative by a
+  **Start** run
 - whether they share openly
 - every predicted relationship and IBD percentage returned (usually two)
-- sortable by saved order or any available IBD percentage
+- click an **IBD** column header to sort high-to-low, then click it again for
+  low-to-high
+
+Above the table, the same full-name / last-name and mtDNA / Y-DNA filters apply
+to the comparison rows.
 
 ## Notes
 
